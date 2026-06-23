@@ -3,14 +3,18 @@
 import { useMemo, useState } from "react";
 import { ExpenseQuickForm } from "@/components/ExpenseQuickForm";
 import { HomeSummary } from "@/components/HomeSummary";
+import { IncomeForm } from "@/components/IncomeForm";
+import { InvestmentForm } from "@/components/InvestmentForm";
 import { PrepaidSettlementForm } from "@/components/PrepaidSettlementForm";
 import { RecurringExpensePanel } from "@/components/RecurringExpensePanel";
 
 type Tab = "home" | "add" | "fixed" | "report";
+type AddMode = "expense" | "income" | "investment";
 type Viewer = "chris" | "wife";
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState<Tab>("home");
+  const [addMode, setAddMode] = useState<AddMode>("expense");
   const [viewer, setViewer] = useState<Viewer>("chris");
 
   const todayText = useMemo(() => {
@@ -39,13 +43,28 @@ export default function HomePage() {
           <HomeSummary viewer={viewer} />
           <section className="card grid">
             <h2>快速操作</h2>
-            <button className="btn" type="button" onClick={() => setActiveTab("add")}>新增支出</button>
+            <button className="btn" type="button" onClick={() => { setActiveTab("add"); setAddMode("expense"); }}>新增支出</button>
+            <button className="btn secondary" type="button" onClick={() => { setActiveTab("add"); setAddMode("income"); }}>新增收入</button>
+            <button className="btn secondary" type="button" onClick={() => { setActiveTab("add"); setAddMode("investment"); }}>新增投資紀錄</button>
             <button className="btn secondary" type="button" onClick={() => setActiveTab("fixed")}>固定支出{viewer === "chris" ? "與午餐餘額" : ""}</button>
           </section>
         </>
       ) : null}
 
-      {activeTab === "add" ? <ExpenseQuickForm viewer={viewer} /> : null}
+      {activeTab === "add" ? (
+        <section className="grid">
+          <div className="card grid" style={{ boxShadow: "none" }}>
+            <div className="row">
+              <button className={addMode === "expense" ? "btn" : "btn secondary"} type="button" onClick={() => setAddMode("expense")}>支出</button>
+              <button className={addMode === "income" ? "btn" : "btn secondary"} type="button" onClick={() => setAddMode("income")}>收入</button>
+              <button className={addMode === "investment" ? "btn" : "btn secondary"} type="button" onClick={() => setAddMode("investment")}>投資</button>
+            </div>
+          </div>
+          {addMode === "expense" ? <ExpenseQuickForm viewer={viewer} /> : null}
+          {addMode === "income" ? <IncomeForm /> : null}
+          {addMode === "investment" ? <InvestmentForm /> : null}
+        </section>
+      ) : null}
       {activeTab === "fixed" ? (
         <>
           <RecurringExpensePanel viewer={viewer} />
