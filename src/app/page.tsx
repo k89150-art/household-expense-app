@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { DashboardCard } from "@/components/DashboardCard";
 import { ExpenseQuickForm } from "@/components/ExpenseQuickForm";
 import { PrepaidSettlementForm } from "@/components/PrepaidSettlementForm";
+import { RecurringExpensePanel } from "@/components/RecurringExpensePanel";
 
 type Tab = "home" | "add" | "fixed" | "report";
 
@@ -32,13 +33,18 @@ export default function HomePage() {
           <section className="card grid">
             <h2>快速操作</h2>
             <button className="btn" type="button" onClick={() => setActiveTab("add")}>新增支出</button>
-            <button className="btn secondary" type="button" onClick={() => setActiveTab("fixed")}>更新午餐餘額</button>
+            <button className="btn secondary" type="button" onClick={() => setActiveTab("fixed")}>固定支出與午餐餘額</button>
           </section>
         </>
       ) : null}
 
       {activeTab === "add" ? <ExpenseQuickForm /> : null}
-      {activeTab === "fixed" ? <PrepaidSettlementForm /> : null}
+      {activeTab === "fixed" ? (
+        <>
+          <RecurringExpensePanel />
+          <PrepaidSettlementForm />
+        </>
+      ) : null}
       {activeTab === "report" ? (
         <section className="card grid">
           <h2>月報表</h2>
