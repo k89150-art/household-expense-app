@@ -33,6 +33,24 @@ const DEFAULT_ITEMS: RecurringItem[] = [
     visibleFor: ["chris"],
   },
   {
+    id: "mobile-chris",
+    name: "手機門號費：我",
+    category: "電話費",
+    amount: 699,
+    target: "self",
+    paymentMethod: "信用卡",
+    visibleFor: ["chris"],
+  },
+  {
+    id: "mobile-wife",
+    name: "手機門號費：我",
+    category: "電話費",
+    amount: 699,
+    target: "self",
+    paymentMethod: "信用卡",
+    visibleFor: ["wife"],
+  },
+  {
     id: "insurance-self-chris",
     name: "保險：我",
     category: "保險",
@@ -99,12 +117,18 @@ const DEFAULT_ITEMS: RecurringItem[] = [
 
 const STORAGE_KEY = "household-expense-demo-recurring-items";
 
+function mergeDefaultItems(storedItems: RecurringItem[]) {
+  const existingIds = new Set(storedItems.map((item) => item.id));
+  const missingDefaults = DEFAULT_ITEMS.filter((item) => !existingIds.has(item.id));
+  return [...storedItems, ...missingDefaults];
+}
+
 function loadStoredItems() {
   if (typeof window === "undefined") return DEFAULT_ITEMS;
   const raw = window.localStorage.getItem(STORAGE_KEY);
   if (!raw) return DEFAULT_ITEMS;
   try {
-    return JSON.parse(raw) as RecurringItem[];
+    return mergeDefaultItems(JSON.parse(raw) as RecurringItem[]);
   } catch {
     return DEFAULT_ITEMS;
   }
