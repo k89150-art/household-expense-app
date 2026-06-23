@@ -1,7 +1,7 @@
 export type UserRole = "husband" | "wife";
-export type PersonTarget = "family" | "chris" | "wife" | "son" | "cat" | "other";
+export type PersonTarget = "chris" | "wife" | "junyao" | "cat";
 export type PaymentMethod = "cash" | "credit_card" | "bank_transfer" | "line_pay" | "prepaid" | "other";
-export type ExpenseScope = "family" | "personal";
+export type ExpenseScope = "personal";
 export type RecurringCycle = "monthly" | "yearly" | "custom";
 export type BillStatus = "unpaid" | "paid" | "partial";
 
@@ -22,6 +22,8 @@ export type ExpenseCategory =
   | "娛樂"
   | "衣物"
   | "寵物"
+  | "保健食品"
+  | "學費"
   | "個人雜支"
   | "信用卡繳款"
   | "其他";
@@ -80,7 +82,7 @@ export interface Income {
   date: string;
   amount: number;
   ownerId: string;
-  category: "薪水" | "獎金" | "兼職" | "補助" | "投資收入" | "其他";
+  category: "薪水" | "生活費轉入" | "獎金" | "兼職" | "補助" | "投資收入" | "其他";
   note?: string;
   createdBy: string;
   createdAt: string;
