@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { AuthGate, useCurrentUser } from "@/components/AuthGate";
 import { ExpenseQuickForm } from "@/components/ExpenseQuickForm";
-import { HomeSummary } from "@/components/HomeSummary";
+import { FirestoreHomeSummary } from "@/components/FirestoreHomeSummary";
 import { IncomeForm } from "@/components/IncomeForm";
 import { InvestmentForm } from "@/components/InvestmentForm";
 import { PrepaidSettlementForm } from "@/components/PrepaidSettlementForm";
@@ -17,6 +17,7 @@ function HouseholdApp() {
   const user = useCurrentUser();
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [addMode, setAddMode] = useState<AddMode>("expense");
+  const [expenseRefreshKey, setExpenseRefreshKey] = useState(0);
   const viewer: Viewer = user?.email === "k89150@gmail.com" ? "chris" : "wife";
 
   const todayText = useMemo(() => {
@@ -25,6 +26,11 @@ function HouseholdApp() {
       month: "long",
     }).format(new Date());
   }, []);
+
+  function refreshExpenses() {
+    setExpenseRefreshKey((value) => value + 1);
+    setActiveTab("home");
+  }
 
   return (
     <main className="container grid">
@@ -38,7 +44,7 @@ function HouseholdApp() {
 
       {activeTab === "home" ? (
         <>
-          <HomeSummary viewer={viewer} />
+          <FirestoreHomeSummary viewer={viewer} refreshKey={expenseRefreshKey} />
           <section className="card grid">
             <h2>快速操作</h2>
             <button className="btn" type="button" onClick={() => { setActiveTab("add"); setAddMode("expense"); }}>新增支出</button>
@@ -58,7 +64,7 @@ function HouseholdApp() {
               <button className={addMode === "investment" ? "btn" : "btn secondary"} type="button" onClick={() => setAddMode("investment")}>投資</button>
             </div>
           </div>
-          {addMode === "expense" ? <ExpenseQuickForm viewer={viewer} /> : null}
+          {addMode === "expense" ? <ExpenseQuickForm viewer={viewer} onSaved={refreshExpenses} /> : null}
           {addMode === "income" ? <IncomeForm /> : null}
           {addMode === "investment" ? <InvestmentForm /> : null}
         </section>
@@ -73,7 +79,7 @@ function HouseholdApp() {
         <section className="card grid">
           <h2>月報表</h2>
           <p className="muted">報表會依登入者顯示「我 / 配偶」，孩子與貓的支出共同統計。</p>
-          <HomeSummary viewer={viewer} />
+          <FirestoreHomeSummary viewer={viewer} refreshKey={expenseRefreshKey} />
         </section>
       ) : null}
 
