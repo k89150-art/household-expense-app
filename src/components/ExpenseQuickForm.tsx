@@ -18,12 +18,15 @@ const CHILD_PAYER_LABEL = {
   wife: { self: "我", spouse: "先生" },
 } as const;
 
+const CREDIT_CARDS = ["玉山", "國泰", "中信"] as const;
+
 export function ExpenseQuickForm({ viewer }: Props) {
   const selfTarget: PersonTarget = viewer === "chris" ? "chris" : "wife";
   const [category, setCategory] = useState<ExpenseCategory>("餐飲");
   const [target, setTarget] = useState<PersonTarget>(selfTarget);
   const [childPaidBy, setChildPaidBy] = useState<"self" | "spouse">("self");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [creditCard, setCreditCard] = useState<(typeof CREDIT_CARDS)[number]>("玉山");
   const [isPrivate, setIsPrivate] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -35,7 +38,8 @@ export function ExpenseQuickForm({ viewer }: Props) {
 
   function handleSave() {
     const targetLabel = targetLabels.find((item) => item.value === target)?.label ?? "我";
-    const base = `已建立展示紀錄：${isPrivate ? "個人雜支" : category}，歸屬：${targetLabel}`;
+    const cardText = paymentMethod === "credit_card" ? `，信用卡：${creditCard}` : "";
+    const base = `已建立展示紀錄：${isPrivate ? "個人雜支" : category}，歸屬：${targetLabel}${cardText}`;
     const payerLabel = CHILD_PAYER_LABEL[viewer][childPaidBy];
     setMessage(target === "junyao" ? `${base}，${payerLabel}付` : base);
   }
@@ -75,6 +79,14 @@ export function ExpenseQuickForm({ viewer }: Props) {
           {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </label>
+      {paymentMethod === "credit_card" ? (
+        <label className="field">
+          <span>選擇信用卡</span>
+          <select className="select" value={creditCard} onChange={(event) => setCreditCard(event.target.value as (typeof CREDIT_CARDS)[number])}>
+            {CREDIT_CARDS.map((card) => <option key={card}>{card}</option>)}
+          </select>
+        </label>
+      ) : null}
       <label className="row" style={{ justifyContent: "flex-start" }}>
         <input type="checkbox" checked={isPrivate} onChange={(event) => setIsPrivate(event.target.checked)} />
         <span>私人明細，共同帳本顯示「個人雜支」</span>
