@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Viewer = "chris" | "wife";
 type Owner = "self" | "spouse" | "junyao" | "cat";
-type CreditCardName = "玉山" | "國泰" | "中信" | "保費卡";
+type CreditCardName = "玉山" | "台新" | "國泰" | "中信" | "保費卡";
 
 type RecurringItem = {
   id: string;
@@ -17,7 +17,9 @@ type RecurringItem = {
   visibleFor: Viewer[];
 };
 
-const NORMAL_CREDIT_CARDS: CreditCardName[] = ["玉山", "國泰", "中信"];
+function getNormalCreditCards(viewer: Viewer): CreditCardName[] {
+  return viewer === "chris" ? ["玉山", "國泰", "中信"] : ["台新", "國泰", "中信"];
+}
 
 function labelForOwner(owner: Owner, viewer: Viewer) {
   if (owner === "self") return "我";
@@ -53,7 +55,7 @@ const DEFAULT_ITEMS: RecurringItem[] = [
     amount: 699,
     target: "self",
     paymentMethod: "信用卡",
-    creditCard: "玉山",
+    creditCard: "台新",
     visibleFor: ["wife"],
   },
   {
@@ -147,16 +149,21 @@ function loadStoredItems() {
 export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
   const [items, setItems] = useState<RecurringItem[]>(loadStoredItems);
   const visibleItems = useMemo(() => items.filter((item) => item.visibleFor.includes(viewer)), [items, viewer]);
+  const creditCards = useMemo(() => getNormalCreditCards(viewer), [viewer]);
   const [selectedId, setSelectedId] = useState("");
   const [showSubscriptionForm, setShowSubscriptionForm] = useState(false);
   const [subscriptionName, setSubscriptionName] = useState("");
   const [subscriptionAmount, setSubscriptionAmount] = useState("");
-  const [subscriptionCard, setSubscriptionCard] = useState<CreditCardName>("玉山");
+  const [subscriptionCard, setSubscriptionCard] = useState<CreditCardName>(creditCards[0]);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, [items]);
+
+  useEffect(() => {
+    setSubscriptionCard(creditCards[0]);
+  }, [creditCards]);
 
   const selectedItem = useMemo(() => {
     return visibleItems.find((item) => item.id === selectedId) ?? visibleItems[0];
@@ -205,7 +212,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
     setSelectedId(item.id);
     setSubscriptionName("");
     setSubscriptionAmount("");
-    setSubscriptionCard("玉山");
+    setSubscriptionCard(creditCards[0]);
     setShowSubscriptionForm(false);
     setMessage(`已新增展示訂閱：${item.name}`);
   }
@@ -238,8 +245,8 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
           {selectedItem.paymentMethod === "信用卡" && selectedItem.creditCard !== "保費卡" ? (
             <label className="field">
               <span>信用卡</span>
-              <select className="select" value={selectedItem.creditCard ?? "玉山"} onChange={(event) => updateSelectedCreditCard(event.target.value as CreditCardName)}>
-                {NORMAL_CREDIT_CARDS.map((card) => <option key={card}>{card}</option>)}
+              <select className="select" value={selectedItem.creditCard ?? creditCards[0]} onChange={(event) => updateSelectedCreditCard(event.target.value as CreditCardName)}>
+                {creditCards.map((card) => <option key={card}>{card}</option>)}
               </select>
             </label>
           ) : null}
@@ -265,7 +272,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
           <label className="field">
             <span>信用卡</span>
             <select className="select" value={subscriptionCard} onChange={(event) => setSubscriptionCard(event.target.value as CreditCardName)}>
-              {NORMAL_CREDIT_CARDS.map((card) => <option key={card}>{card}</option>)}
+              {creditCards.map((card) => <option key={card}>{card}</option>)}
             </select>
           </label>
           <button className="btn secondary" type="submit">儲存訂閱模板</button>
