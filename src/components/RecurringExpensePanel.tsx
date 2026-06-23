@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Viewer = "chris" | "wife";
 type Owner = "self" | "spouse" | "junyao" | "cat";
+type CreditCardName = "玉山" | "國泰" | "中信" | "保費卡";
 
 type RecurringItem = {
   id: string;
@@ -12,8 +13,11 @@ type RecurringItem = {
   amount: number;
   target: Owner;
   paymentMethod: string;
+  creditCard?: CreditCardName;
   visibleFor: Viewer[];
 };
+
+const NORMAL_CREDIT_CARDS: CreditCardName[] = ["玉山", "國泰", "中信"];
 
 function labelForOwner(owner: Owner, viewer: Viewer) {
   if (owner === "self") return "我";
@@ -39,6 +43,7 @@ const DEFAULT_ITEMS: RecurringItem[] = [
     amount: 699,
     target: "self",
     paymentMethod: "信用卡",
+    creditCard: "玉山",
     visibleFor: ["chris"],
   },
   {
@@ -48,6 +53,7 @@ const DEFAULT_ITEMS: RecurringItem[] = [
     amount: 699,
     target: "self",
     paymentMethod: "信用卡",
+    creditCard: "玉山",
     visibleFor: ["wife"],
   },
   {
@@ -56,7 +62,8 @@ const DEFAULT_ITEMS: RecurringItem[] = [
     category: "保險",
     amount: 4200,
     target: "self",
-    paymentMethod: "信用卡或轉帳",
+    paymentMethod: "信用卡",
+    creditCard: "保費卡",
     visibleFor: ["chris"],
   },
   {
@@ -65,7 +72,8 @@ const DEFAULT_ITEMS: RecurringItem[] = [
     category: "保險",
     amount: 3600,
     target: "self",
-    paymentMethod: "信用卡或轉帳",
+    paymentMethod: "信用卡",
+    creditCard: "保費卡",
     visibleFor: ["wife"],
   },
   {
@@ -74,7 +82,8 @@ const DEFAULT_ITEMS: RecurringItem[] = [
     category: "保險",
     amount: 1500,
     target: "junyao",
-    paymentMethod: "信用卡或轉帳",
+    paymentMethod: "信用卡",
+    creditCard: "保費卡",
     visibleFor: ["chris"],
   },
   {
@@ -111,6 +120,7 @@ const DEFAULT_ITEMS: RecurringItem[] = [
     amount: 999,
     target: "self",
     paymentMethod: "信用卡",
+    creditCard: "中信",
     visibleFor: ["chris"],
   },
 ];
@@ -141,6 +151,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
   const [showSubscriptionForm, setShowSubscriptionForm] = useState(false);
   const [subscriptionName, setSubscriptionName] = useState("");
   const [subscriptionAmount, setSubscriptionAmount] = useState("");
+  const [subscriptionCard, setSubscriptionCard] = useState<CreditCardName>("玉山");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -160,9 +171,15 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
     setItems((current) => current.map((item) => item.id === selectedItem.id ? { ...item, amount } : item));
   }
 
+  function updateSelectedCreditCard(card: CreditCardName) {
+    if (!selectedItem) return;
+    setItems((current) => current.map((item) => item.id === selectedItem.id ? { ...item, creditCard: card } : item));
+  }
+
   function importThisMonth() {
     if (!selectedItem) return;
-    setMessage(`已新增展示支出：${selectedItem.name} $${selectedItem.amount.toLocaleString("zh-TW")}。下次點這個項目會記住這次金額。`);
+    const cardText = selectedItem.creditCard ? `，信用卡：${selectedItem.creditCard}` : "";
+    setMessage(`已新增展示支出：${selectedItem.name} $${selectedItem.amount.toLocaleString("zh-TW")}${cardText}`);
   }
 
   function addSubscription(event: FormEvent<HTMLFormElement>) {
@@ -180,6 +197,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
       amount,
       target: "self",
       paymentMethod: "信用卡",
+      creditCard: subscriptionCard,
       visibleFor: [viewer],
     };
 
@@ -187,6 +205,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
     setSelectedId(item.id);
     setSubscriptionName("");
     setSubscriptionAmount("");
+    setSubscriptionCard("玉山");
     setShowSubscriptionForm(false);
     setMessage(`已新增展示訂閱：${item.name}`);
   }
@@ -208,7 +227,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
           <div className="row">
             <div>
               <strong>{selectedItem.name}</strong>
-              <div className="muted">{selectedItem.category}・{labelForOwner(selectedItem.target, viewer)}・{selectedItem.paymentMethod}</div>
+              <div className="muted">{selectedItem.category}・{labelForOwner(selectedItem.target, viewer)}・{selectedItem.paymentMethod}{selectedItem.creditCard ? `・${selectedItem.creditCard}` : ""}</div>
             </div>
             <strong>${selectedItem.amount.toLocaleString("zh-TW")}</strong>
           </div>
@@ -216,6 +235,14 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
             <span>金額</span>
             <input className="input" type="number" value={selectedItem.amount} onChange={(event) => updateSelectedAmount(Number(event.target.value))} />
           </label>
+          {selectedItem.paymentMethod === "信用卡" && selectedItem.creditCard !== "保費卡" ? (
+            <label className="field">
+              <span>信用卡</span>
+              <select className="select" value={selectedItem.creditCard ?? "玉山"} onChange={(event) => updateSelectedCreditCard(event.target.value as CreditCardName)}>
+                {NORMAL_CREDIT_CARDS.map((card) => <option key={card}>{card}</option>)}
+              </select>
+            </label>
+          ) : null}
           <button className="btn secondary" type="button" onClick={importThisMonth}>新增支出</button>
         </article>
       ) : null}
@@ -234,6 +261,12 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
           <label className="field">
             <span>金額</span>
             <input className="input" type="number" value={subscriptionAmount} onChange={(event) => setSubscriptionAmount(event.target.value)} placeholder="例如 660" />
+          </label>
+          <label className="field">
+            <span>信用卡</span>
+            <select className="select" value={subscriptionCard} onChange={(event) => setSubscriptionCard(event.target.value as CreditCardName)}>
+              {NORMAL_CREDIT_CARDS.map((card) => <option key={card}>{card}</option>)}
+            </select>
           </label>
           <button className="btn secondary" type="submit">儲存訂閱模板</button>
         </form>
