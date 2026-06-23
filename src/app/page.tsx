@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { DashboardCard } from "@/components/DashboardCard";
 import { ExpenseQuickForm } from "@/components/ExpenseQuickForm";
+import { HomeSummary } from "@/components/HomeSummary";
 import { PrepaidSettlementForm } from "@/components/PrepaidSettlementForm";
 import { RecurringExpensePanel } from "@/components/RecurringExpensePanel";
 
@@ -27,9 +27,7 @@ export default function HomePage() {
 
       {activeTab === "home" ? (
         <>
-          <DashboardCard title="本月家庭支出" amount={24300} hint="不含信用卡繳款與生活費轉帳" />
-          <DashboardCard title="本月個人支出" amount={4150} hint="含 Chris 醫院午餐與個人餐飲" />
-          <DashboardCard title="本月生活費轉帳" amount={30000} hint="Chris → 太太，已轉帳" />
+          <HomeSummary />
           <section className="card grid">
             <h2>快速操作</h2>
             <button className="btn" type="button" onClick={() => setActiveTab("add")}>新增支出</button>
@@ -48,9 +46,8 @@ export default function HomePage() {
       {activeTab === "report" ? (
         <section className="card grid">
           <h2>月報表</h2>
-          <p className="muted">這裡之後會顯示分類統計、信用卡統計、固定支出與生活費轉帳狀態。</p>
-          <DashboardCard title="展示：餐飲" amount={6800} />
-          <DashboardCard title="展示：醫療" amount={850} />
+          <p className="muted">這裡之後會顯示我、太太、竣堯、貓的分類統計，也會標記每筆由誰支付。</p>
+          <HomeSummary />
         </section>
       ) : null}
 
