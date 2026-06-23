@@ -1,19 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { EXPENSE_CATEGORIES, PAYMENT_METHOD_LABELS, PAYER_LABELS, TARGET_LABELS } from "@/lib/categories";
+import { EXPENSE_CATEGORIES, PAYMENT_METHOD_LABELS, TARGET_LABELS } from "@/lib/categories";
 import { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
 
 export function ExpenseQuickForm() {
   const [category, setCategory] = useState<ExpenseCategory>("餐飲");
   const [target, setTarget] = useState<PersonTarget>("chris");
-  const [payer, setPayer] = useState<"chris" | "wife">("chris");
+  const [childPaidBy, setChildPaidBy] = useState<"我" | "太太">("我");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [isPrivate, setIsPrivate] = useState(false);
   const [message, setMessage] = useState("");
 
   function handleSave() {
-    setMessage(`已建立展示紀錄：${isPrivate ? "個人雜支" : category}，歸屬：${TARGET_LABELS[target]}，付款：${PAYER_LABELS[payer]}`);
+    const base = `已建立展示紀錄：${isPrivate ? "個人雜支" : category}，歸屬：${TARGET_LABELS[target]}`;
+    setMessage(target === "junyao" ? `${base}，${childPaidBy}付` : base);
   }
 
   return (
@@ -35,12 +36,15 @@ export function ExpenseQuickForm() {
           {Object.entries(TARGET_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </label>
-      <label className="field">
-        <span>付款者</span>
-        <select className="select" value={payer} onChange={(event) => setPayer(event.target.value as "chris" | "wife")}>
-          {Object.entries(PAYER_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select>
-      </label>
+      {target === "junyao" ? (
+        <label className="field">
+          <span>竣堯支出由誰付</span>
+          <select className="select" value={childPaidBy} onChange={(event) => setChildPaidBy(event.target.value as "我" | "太太")}>
+            <option>我</option>
+            <option>太太</option>
+          </select>
+        </label>
+      ) : null}
       <label className="field">
         <span>付款方式</span>
         <select className="select" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}>
