@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EXPENSE_CATEGORIES, PAYMENT_METHOD_LABELS } from "@/lib/categories";
 import { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
 
 type Props = {
   viewer: "chris" | "wife";
 };
+
+type CreditCardName = "玉山" | "台新" | "國泰" | "中信";
 
 const VIEWER_LABEL = {
   chris: "我",
@@ -18,17 +20,25 @@ const CHILD_PAYER_LABEL = {
   wife: { self: "我", spouse: "先生" },
 } as const;
 
-const CREDIT_CARDS = ["玉山", "國泰", "中信"] as const;
+function getCreditCards(viewer: Props["viewer"]): CreditCardName[] {
+  return viewer === "chris" ? ["玉山", "國泰", "中信"] : ["台新", "國泰", "中信"];
+}
 
 export function ExpenseQuickForm({ viewer }: Props) {
   const selfTarget: PersonTarget = viewer === "chris" ? "chris" : "wife";
+  const creditCards = useMemo(() => getCreditCards(viewer), [viewer]);
   const [category, setCategory] = useState<ExpenseCategory>("餐飲");
   const [target, setTarget] = useState<PersonTarget>(selfTarget);
   const [childPaidBy, setChildPaidBy] = useState<"self" | "spouse">("self");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
-  const [creditCard, setCreditCard] = useState<(typeof CREDIT_CARDS)[number]>("玉山");
+  const [creditCard, setCreditCard] = useState<CreditCardName>(creditCards[0]);
   const [isPrivate, setIsPrivate] = useState(false);
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    setTarget(selfTarget);
+    setCreditCard(creditCards[0]);
+  }, [selfTarget, creditCards]);
 
   const targetLabels: { value: PersonTarget; label: string }[] = [
     { value: selfTarget, label: VIEWER_LABEL[viewer] },
@@ -82,8 +92,8 @@ export function ExpenseQuickForm({ viewer }: Props) {
       {paymentMethod === "credit_card" ? (
         <label className="field">
           <span>選擇信用卡</span>
-          <select className="select" value={creditCard} onChange={(event) => setCreditCard(event.target.value as (typeof CREDIT_CARDS)[number])}>
-            {CREDIT_CARDS.map((card) => <option key={card}>{card}</option>)}
+          <select className="select" value={creditCard} onChange={(event) => setCreditCard(event.target.value as CreditCardName)}>
+            {creditCards.map((card) => <option key={card}>{card}</option>)}
           </select>
         </label>
       ) : null}
