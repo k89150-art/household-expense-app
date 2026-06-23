@@ -4,10 +4,7 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "餐飲",
   "交通",
   "生活用品",
-  "孩子",
   "醫療",
-  "保險",
-  "房貸",
   "管理費",
   "水費",
   "電費",
@@ -17,9 +14,7 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "衣物",
   "寵物",
   "保健食品",
-  "學費",
   "個人雜支",
-  "信用卡繳款",
   "其他",
 ];
 
