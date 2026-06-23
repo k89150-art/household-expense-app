@@ -17,18 +17,23 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "娛樂",
   "衣物",
   "寵物",
+  "保健食品",
+  "學費",
   "個人雜支",
   "信用卡繳款",
   "其他",
 ];
 
 export const TARGET_LABELS = {
-  family: "家庭",
-  chris: "Chris",
+  chris: "我",
   wife: "太太",
-  son: "兒子",
+  junyao: "竣堯",
   cat: "貓",
-  other: "其他",
+} as const;
+
+export const PAYER_LABELS = {
+  chris: "我付",
+  wife: "太太付",
 } as const;
 
 export const PAYMENT_METHOD_LABELS = {
