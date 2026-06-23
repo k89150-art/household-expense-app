@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Viewer = "chris" | "wife";
 type Owner = "self" | "spouse" | "junyao" | "cat";
@@ -12,7 +12,6 @@ type RecurringItem = {
   amount: number;
   target: Owner;
   paymentMethod: string;
-  note: string;
   visibleFor: Viewer[];
 };
 
@@ -31,7 +30,6 @@ const DEFAULT_ITEMS: RecurringItem[] = [
     amount: 25000,
     target: "self",
     paymentMethod: "銀行扣款",
-    note: "每月固定帶入，可依利率調整",
     visibleFor: ["chris"],
   },
   {
@@ -41,7 +39,6 @@ const DEFAULT_ITEMS: RecurringItem[] = [
     amount: 4200,
     target: "self",
     paymentMethod: "信用卡或轉帳",
-    note: "個人手機只顯示自己的保險模板",
     visibleFor: ["chris"],
   },
   {
@@ -51,7 +48,6 @@ const DEFAULT_ITEMS: RecurringItem[] = [
     amount: 3600,
     target: "self",
     paymentMethod: "信用卡或轉帳",
-    note: "個人手機只顯示自己的保險模板",
     visibleFor: ["wife"],
   },
   {
@@ -61,8 +57,7 @@ const DEFAULT_ITEMS: RecurringItem[] = [
     amount: 1500,
     target: "junyao",
     paymentMethod: "信用卡或轉帳",
-    note: "孩子保險會統計到竣堯支出",
-    visibleFor: ["chris", "wife"],
+    visibleFor: ["chris"],
   },
   {
     id: "school-fee",
@@ -71,18 +66,16 @@ const DEFAULT_ITEMS: RecurringItem[] = [
     amount: 12000,
     target: "junyao",
     paymentMethod: "轉帳",
-    note: "孩子支出會顯示細項與由誰支付",
     visibleFor: ["chris", "wife"],
   },
   {
-    id: "supplement-junyao",
-    name: "竣堯保健食品",
-    category: "保健食品",
-    amount: 1800,
+    id: "after-school-care",
+    name: "竣堯延托費",
+    category: "學費",
+    amount: 2500,
     target: "junyao",
-    paymentMethod: "信用卡",
-    note: "孩子細項會在首頁竣堯區塊統計",
-    visibleFor: ["chris", "wife"],
+    paymentMethod: "轉帳",
+    visibleFor: ["wife"],
   },
   {
     id: "management-fee",
@@ -91,7 +84,6 @@ const DEFAULT_ITEMS: RecurringItem[] = [
     amount: 2500,
     target: "self",
     paymentMethod: "轉帳",
-    note: "社區管理費",
     visibleFor: ["chris"],
   },
   {
@@ -101,23 +93,43 @@ const DEFAULT_ITEMS: RecurringItem[] = [
     amount: 999,
     target: "self",
     paymentMethod: "信用卡",
-    note: "每月固定扣款",
     visibleFor: ["chris"],
   },
 ];
 
+const STORAGE_KEY = "household-expense-demo-recurring-items";
+
+function loadStoredItems() {
+  if (typeof window === "undefined") return DEFAULT_ITEMS;
+  const raw = window.localStorage.getItem(STORAGE_KEY);
+  if (!raw) return DEFAULT_ITEMS;
+  try {
+    return JSON.parse(raw) as RecurringItem[];
+  } catch {
+    return DEFAULT_ITEMS;
+  }
+}
+
 export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
-  const [items, setItems] = useState(DEFAULT_ITEMS);
+  const [items, setItems] = useState<RecurringItem[]>(loadStoredItems);
   const visibleItems = useMemo(() => items.filter((item) => item.visibleFor.includes(viewer)), [items, viewer]);
-  const [selectedId, setSelectedId] = useState(visibleItems[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState("");
   const [showSubscriptionForm, setShowSubscriptionForm] = useState(false);
   const [subscriptionName, setSubscriptionName] = useState("");
   const [subscriptionAmount, setSubscriptionAmount] = useState("");
   const [message, setMessage] = useState("");
 
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  }, [items]);
+
   const selectedItem = useMemo(() => {
     return visibleItems.find((item) => item.id === selectedId) ?? visibleItems[0];
   }, [selectedId, visibleItems]);
+
+  useEffect(() => {
+    if (selectedItem) setSelectedId(selectedItem.id);
+  }, [viewer, selectedItem]);
 
   function updateSelectedAmount(amount: number) {
     if (!selectedItem) return;
@@ -126,7 +138,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
 
   function importThisMonth() {
     if (!selectedItem) return;
-    setMessage(`已帶入展示紀錄：${selectedItem.name} $${selectedItem.amount.toLocaleString("zh-TW")}，歸屬：${labelForOwner(selectedItem.target, viewer)}`);
+    setMessage(`已新增展示支出：${selectedItem.name} $${selectedItem.amount.toLocaleString("zh-TW")}。下次點這個項目會記住這次金額。`);
   }
 
   function addSubscription(event: FormEvent<HTMLFormElement>) {
@@ -144,7 +156,6 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
       amount,
       target: "self",
       paymentMethod: "信用卡",
-      note: "個人訂閱模板，之後會依登入者各自保存，不共用",
       visibleFor: [viewer],
     };
 
@@ -159,8 +170,6 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
   return (
     <section className="card grid">
       <h2>固定支出模板</h2>
-      <p className="muted">下拉選單只顯示目前這支手機自己的固定支出，以及共同的竣堯支出。</p>
-
       <label className="field">
         <span>選擇固定支出</span>
         <select className="select" value={selectedItem?.id ?? ""} onChange={(event) => setSelectedId(event.target.value)}>
@@ -183,7 +192,6 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
             <span>金額</span>
             <input className="input" type="number" value={selectedItem.amount} onChange={(event) => updateSelectedAmount(Number(event.target.value))} />
           </label>
-          <p className="muted" style={{ margin: 0 }}>{selectedItem.note}</p>
           <button className="btn secondary" type="button" onClick={importThisMonth}>新增支出</button>
         </article>
       ) : null}
@@ -195,7 +203,6 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
       {showSubscriptionForm ? (
         <form className="card grid" style={{ boxShadow: "none" }} onSubmit={addSubscription}>
           <h3 style={{ margin: 0 }}>新增個人訂閱</h3>
-          <p className="muted" style={{ margin: 0 }}>不用選歸屬，這筆訂閱就是目前登入者自己的。</p>
           <label className="field">
             <span>訂閱名稱</span>
             <input className="input" value={subscriptionName} onChange={(event) => setSubscriptionName(event.target.value)} placeholder="例如 GPT、動畫瘋" />
