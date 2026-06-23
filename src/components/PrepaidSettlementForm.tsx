@@ -7,6 +7,7 @@ export function PrepaidSettlementForm() {
   const [previousBalance, setPreviousBalance] = useState(1000);
   const [topUpAmount, setTopUpAmount] = useState(0);
   const [currentBalance, setCurrentBalance] = useState(580);
+  const [savedMessage, setSavedMessage] = useState("");
 
   const result = useMemo(() => {
     try {
@@ -15,6 +16,14 @@ export function PrepaidSettlementForm() {
       return null;
     }
   }, [previousBalance, topUpAmount, currentBalance]);
+
+  function handleCreateExpense() {
+    if (result === null) {
+      setSavedMessage("金額有誤，請重新確認。");
+      return;
+    }
+    setSavedMessage(`已建立展示紀錄：本週醫院午餐 $${result.toLocaleString("zh-TW")}`);
+  }
 
   return (
     <section className="card grid">
@@ -36,7 +45,8 @@ export function PrepaidSettlementForm() {
         <span>本週醫院午餐</span>
         <strong>{result === null ? "請確認金額" : `$${result.toLocaleString("zh-TW")}`}</strong>
       </div>
-      <button className="btn secondary">建立本週餐飲支出</button>
+      <button className="btn secondary" type="button" onClick={handleCreateExpense}>建立本週餐飲支出</button>
+      {savedMessage ? <p className="muted">{savedMessage}</p> : null}
     </section>
   );
 }
