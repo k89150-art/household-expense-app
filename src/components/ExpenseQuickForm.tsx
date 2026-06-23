@@ -42,7 +42,7 @@ export function ExpenseQuickForm() {
       {isPrivate ? (
         <label className="field">
           <span>私人明細</span>
-          <input className="input" placeholder="只有本人可見，例如陀螺" />
+          <input className="input" placeholder="僅本人可見的品項或備註" />
         </label>
       ) : null}
       <label className="field">
