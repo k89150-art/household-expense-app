@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
-import { Viewer } from "@/lib/household";
+import { Viewer, getViewerByEmail } from "@/lib/household";
 import { addInvestmentRecord } from "@/lib/records";
 
 type InvestmentType = "定期定額" | "單筆買入" | "股息再投入" | "其他";
 
 type Props = {
-  viewer: Viewer;
+  viewer?: Viewer;
   onSaved?: () => void;
 };
 
@@ -20,6 +20,7 @@ function today() {
 
 export function InvestmentForm({ viewer, onSaved }: Props) {
   const user = useCurrentUser();
+  const owner = viewer ?? getViewerByEmail(user?.email);
   const [date, setDate] = useState(today());
   const [type, setType] = useState<InvestmentType>("定期定額");
   const [name, setName] = useState("");
@@ -47,7 +48,7 @@ export function InvestmentForm({ viewer, onSaved }: Props) {
         type,
         name: name.trim(),
         amount: parsedAmount,
-        owner: viewer,
+        owner,
         note: note.trim() || undefined,
         createdBy: user.uid,
       });
