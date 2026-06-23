@@ -25,14 +25,21 @@ export type ExpenseRecord = {
 
 export type NewExpenseInput = Omit<ExpenseRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
 
+type FirestoreWritable = Record<string, string | number | boolean | unknown>;
+
+function removeUndefinedFields<T extends Record<string, unknown>>(value: T) {
+  return Object.fromEntries(Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined)) as FirestoreWritable;
+}
+
 export async function addExpenseRecord(input: NewExpenseInput) {
   const collectionRef = collection(db, "households", HOUSEHOLD_ID, "expenses");
-  await addDoc(collectionRef, {
+  const payload = removeUndefinedFields({
     ...input,
     householdId: HOUSEHOLD_ID,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+  await addDoc(collectionRef, payload);
 }
 
 export async function getExpenseRecordsByMonth(month: string) {
@@ -43,7 +50,7 @@ export async function getExpenseRecordsByMonth(month: string) {
 
 export async function updateExpenseRecord(id: string, input: Partial<NewExpenseInput>) {
   const docRef = doc(db, "households", HOUSEHOLD_ID, "expenses", id);
-  await updateDoc(docRef, { ...input, updatedAt: serverTimestamp() });
+  await updateDoc(docRef, removeUndefinedFields({ ...input, updatedAt: serverTimestamp() }));
 }
 
 export async function deleteExpenseRecord(id: string) {
