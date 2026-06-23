@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useCurrentUser } from "@/components/AuthGate";
 import { EXPENSE_CATEGORIES, PAYMENT_METHOD_LABELS } from "@/lib/categories";
+import { addExpenseRecord } from "@/lib/records";
 import { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
 
 type Props = {
   viewer: "chris" | "wife";
+  onSaved?: () => void;
 };
 
 type CreditCardName = "玉山" | "台新" | "國泰" | "中信";
@@ -24,15 +27,25 @@ function getCreditCards(viewer: Props["viewer"]): CreditCardName[] {
   return viewer === "chris" ? ["玉山", "國泰", "中信"] : ["台新", "國泰", "中信"];
 }
 
-export function ExpenseQuickForm({ viewer }: Props) {
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function ExpenseQuickForm({ viewer, onSaved }: Props) {
+  const user = useCurrentUser();
   const selfTarget: PersonTarget = viewer === "chris" ? "chris" : "wife";
   const creditCards = useMemo(() => getCreditCards(viewer), [viewer]);
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(today());
   const [category, setCategory] = useState<ExpenseCategory>("餐飲");
   const [target, setTarget] = useState<PersonTarget>(selfTarget);
   const [childPaidBy, setChildPaidBy] = useState<"self" | "spouse">("self");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [creditCard, setCreditCard] = useState<CreditCardName>(creditCards[0]);
   const [isPrivate, setIsPrivate] = useState(false);
+  const [privateNote, setPrivateNote] = useState("");
+  const [note, setNote] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -46,12 +59,48 @@ export function ExpenseQuickForm({ viewer }: Props) {
     { value: "cat", label: "貓" },
   ];
 
-  function handleSave() {
-    const targetLabel = targetLabels.find((item) => item.value === target)?.label ?? "我";
-    const cardText = paymentMethod === "credit_card" ? `，信用卡：${creditCard}` : "";
-    const base = `已建立展示紀錄：${isPrivate ? "個人雜支" : category}，歸屬：${targetLabel}${cardText}`;
-    const payerLabel = CHILD_PAYER_LABEL[viewer][childPaidBy];
-    setMessage(target === "junyao" ? `${base}，${payerLabel}付` : base);
+  async function handleSave() {
+    const parsedAmount = Number(amount);
+    if (!user) {
+      setMessage("請先登入。");
+      return;
+    }
+    if (!parsedAmount || parsedAmount <= 0) {
+      setMessage("請輸入正確金額。");
+      return;
+    }
+
+    const paidBy = target === "junyao" && childPaidBy === "spouse"
+      ? (viewer === "chris" ? "wife" : "chris")
+      : viewer;
+
+    setIsSaving(true);
+    setMessage("");
+    try {
+      await addExpenseRecord({
+        date,
+        amount: parsedAmount,
+        category: isPrivate ? "個人雜支" : category,
+        target,
+        paidBy,
+        paymentMethod,
+        creditCard: paymentMethod === "credit_card" ? creditCard : undefined,
+        note: note.trim() || undefined,
+        isPrivate,
+        privateNote: isPrivate ? privateNote.trim() || undefined : undefined,
+        createdBy: user.uid,
+      });
+      setAmount("");
+      setNote("");
+      setPrivateNote("");
+      setMessage("已儲存到資料庫。");
+      onSaved?.();
+    } catch (error) {
+      console.error(error);
+      setMessage("儲存失敗，請確認 Firestore Database 已建立，並且安全規則已允許登入使用者讀寫。");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -59,8 +108,12 @@ export function ExpenseQuickForm({ viewer }: Props) {
       <h2>新增支出</h2>
       <p className="muted">一般支出預設就是目前登入者支付；只有竣堯的支出需要標記由誰付。</p>
       <label className="field">
+        <span>日期</span>
+        <input className="input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+      </label>
+      <label className="field">
         <span>金額</span>
-        <input className="input" type="number" inputMode="decimal" placeholder="例如 120" />
+        <input className="input" type="number" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="例如 120" />
       </label>
       <label className="field">
         <span>類別</span>
@@ -104,14 +157,14 @@ export function ExpenseQuickForm({ viewer }: Props) {
       {isPrivate ? (
         <label className="field">
           <span>私人明細</span>
-          <input className="input" placeholder="僅本人可見的品項或備註" />
+          <input className="input" value={privateNote} onChange={(event) => setPrivateNote(event.target.value)} placeholder="僅本人可見的品項或備註" />
         </label>
       ) : null}
       <label className="field">
         <span>備註</span>
-        <input className="input" placeholder="例如醫院訂飯、全聯、管理費" />
+        <input className="input" value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如醫院訂飯、全聯、管理費" />
       </label>
-      <button className="btn" type="button" onClick={handleSave}>儲存</button>
+      <button className="btn" type="button" onClick={handleSave} disabled={isSaving}>{isSaving ? "儲存中..." : "儲存"}</button>
       {message ? <p className="muted">{message}</p> : null}
     </section>
   );
