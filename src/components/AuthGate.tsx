@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, createContext, useContext, useEffect, useState } from "react";
 import { GoogleAuthProvider, User, onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
@@ -9,6 +9,11 @@ type Props = {
 };
 
 const provider = new GoogleAuthProvider();
+const AuthUserContext = createContext<User | null>(null);
+
+export function useCurrentUser() {
+  return useContext(AuthUserContext);
+}
 
 export function AuthGate({ children }: Props) {
   const [user, setUser] = useState<User | null>(null);
@@ -61,7 +66,7 @@ export function AuthGate({ children }: Props) {
   }
 
   return (
-    <>
+    <AuthUserContext.Provider value={user}>
       <section className="container" style={{ paddingBottom: 0 }}>
         <div className="card row" style={{ boxShadow: "none" }}>
           <div>
@@ -72,6 +77,6 @@ export function AuthGate({ children }: Props) {
         </div>
       </section>
       {children}
-    </>
+    </AuthUserContext.Provider>
   );
 }
