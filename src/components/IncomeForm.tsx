@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
-import { Viewer } from "@/lib/household";
+import { Viewer, getViewerByEmail } from "@/lib/household";
 import { addIncomeRecord } from "@/lib/records";
 
 type IncomeType = "本薪" | "獎勵金" | "加班費" | "年終" | "生活費轉入" | "其他";
 
 type Props = {
-  viewer: Viewer;
+  viewer?: Viewer;
   onSaved?: () => void;
 };
 
@@ -20,6 +20,7 @@ function today() {
 
 export function IncomeForm({ viewer, onSaved }: Props) {
   const user = useCurrentUser();
+  const owner = viewer ?? getViewerByEmail(user?.email);
   const [date, setDate] = useState(today());
   const [incomeType, setIncomeType] = useState<IncomeType>("本薪");
   const [amount, setAmount] = useState("");
@@ -44,7 +45,7 @@ export function IncomeForm({ viewer, onSaved }: Props) {
       await addIncomeRecord({
         date,
         amount: parsedAmount,
-        owner: viewer,
+        owner,
         category: incomeType,
         note: note.trim() || undefined,
         createdBy: user.uid,
