@@ -1,0 +1,30 @@
+:root {
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --text: #18202a;
+  --muted: #687383;
+  --line: #e7e9ee;
+  --primary: #1f7a5a;
+  --danger: #c94848;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+button, input, select, textarea { font: inherit; }
+.container { max-width: 520px; margin: 0 auto; padding: 16px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 16px; box-shadow: 0 8px 24px rgba(18, 25, 38, 0.05); }
+.grid { display: grid; gap: 12px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.muted { color: var(--muted); }
+.amount { font-size: 28px; font-weight: 800; }
+.btn { border: 0; border-radius: 14px; padding: 12px 14px; background: var(--primary); color: white; font-weight: 700; width: 100%; }
+.btn.secondary { background: #edf3f0; color: var(--primary); }
+.field { display: grid; gap: 6px; }
+.input, .select { width: 100%; border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: white; }
+.nav { position: sticky; bottom: 0; background: rgba(246,247,249,0.9); backdrop-filter: blur(10px); padding: 10px 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.nav button { border: 1px solid var(--line); background: white; border-radius: 12px; padding: 8px 4px; font-size: 12px; }
