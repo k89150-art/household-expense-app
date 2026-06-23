@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { deleteExpenseRecord, getExpenseRecordsByMonth, ExpenseRecord } from "@/lib/records";
+import { deleteExpenseRecord, deleteIncomeRecord, deleteInvestmentRecord, getExpenseRecordsByMonth, getIncomeRecordsByMonth, getInvestmentRecordsByMonth, ExpenseRecord, IncomeRecord, InvestmentRecord } from "@/lib/records";
 import { Viewer } from "@/lib/household";
 
 type Scope = "month" | "all";
@@ -70,13 +70,29 @@ function groupByCreditCard(records: ExpenseRecord[]) {
   }, {});
 }
 
+function groupByOwner<T extends { owner: "chris" | "wife" }>(records: T[]) {
+  return records.reduce<Record<string, T[]>>((groups, record) => {
+    groups[record.owner] = [...(groups[record.owner] ?? []), record];
+    return groups;
+  }, {});
+}
+
+function ownerLabel(owner: "chris" | "wife", viewer: Viewer) {
+  if (owner === "chris") return viewer === "chris" ? "我" : "先生";
+  return viewer === "wife" ? "我" : "太太";
+}
+
 export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [selectedMonth, setSelectedMonth] = useState(currentMonth());
   const [scope, setScope] = useState<Scope>("month");
-  const [records, setRecords] = useState<ExpenseRecord[]>([]);
+  const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
+  const [incomes, setIncomes] = useState<IncomeRecord[]>([]);
+  const [investments, setInvestments] = useState<InvestmentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [openedTarget, setOpenedTarget] = useState<string | null>(null);
   const [openedCategory, setOpenedCategory] = useState<string | null>(null);
+  const [showIncomes, setShowIncomes] = useState(false);
+  const [showInvestments, setShowInvestments] = useState(false);
   const [showCreditCards, setShowCreditCards] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -85,8 +101,14 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     setMessage("");
     try {
       const targetMonth = scope === "month" ? selectedMonth : currentMonth();
-      const data = await getExpenseRecordsByMonth(targetMonth);
-      setRecords(data);
+      const [expenseData, incomeData, investmentData] = await Promise.all([
+        getExpenseRecordsByMonth(targetMonth),
+        getIncomeRecordsByMonth(targetMonth),
+        getInvestmentRecordsByMonth(targetMonth),
+      ]);
+      setExpenses(expenseData);
+      setIncomes(incomeData);
+      setInvestments(investmentData);
     } catch (error) {
       console.error(error);
       setMessage("讀取資料失敗。請確認 Firestore Database 已建立，且安全規則已允許登入使用者讀取。");
@@ -100,16 +122,36 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth, scope, refreshKey]);
 
-  async function handleDelete(id: string) {
+  async function handleDeleteExpense(id: string) {
     const ok = window.confirm("確定要刪除這筆支出嗎？");
     if (!ok) return;
     await deleteExpenseRecord(id);
     await loadRecords();
   }
 
-  const totalExpense = records.reduce((sum, record) => sum + record.amount, 0);
-  const groupedTargets = useMemo(() => groupByTarget(records), [records]);
-  const creditCardGroups = useMemo(() => groupByCreditCard(records), [records]);
+  async function handleDeleteIncome(id: string) {
+    const ok = window.confirm("確定要刪除這筆收入嗎？");
+    if (!ok) return;
+    await deleteIncomeRecord(id);
+    await loadRecords();
+  }
+
+  async function handleDeleteInvestment(id: string) {
+    const ok = window.confirm("確定要刪除這筆投資紀錄嗎？");
+    if (!ok) return;
+    await deleteInvestmentRecord(id);
+    await loadRecords();
+  }
+
+  const totalIncome = incomes.reduce((sum, record) => sum + record.amount, 0);
+  const totalExpense = expenses.reduce((sum, record) => sum + record.amount, 0);
+  const totalInvestment = investments.reduce((sum, record) => sum + record.amount, 0);
+  const cashFlowBalance = totalIncome - totalExpense - totalInvestment;
+  const expenseBalance = totalIncome - totalExpense;
+  const groupedTargets = useMemo(() => groupByTarget(expenses), [expenses]);
+  const groupedIncomes = useMemo(() => groupByOwner(incomes), [incomes]);
+  const groupedInvestments = useMemo(() => groupByOwner(investments), [investments]);
+  const creditCardGroups = useMemo(() => groupByCreditCard(expenses), [expenses]);
   const creditCardTotal = Object.values(creditCardGroups).flat().reduce((sum, record) => sum + record.amount, 0);
 
   return (
@@ -128,13 +170,47 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
 
       <article className="card grid">
         <h2>{scope === "month" ? "當月總結" : "目前月份總結"}</h2>
+        <div className="row"><span>總收入</span><strong>{money(totalIncome)}</strong></div>
         <div className="row"><span>總支出</span><strong>{money(totalExpense)}</strong></div>
-        <p className="muted" style={{ margin: 0 }}>目前正式版先接上支出資料；收入與投資會在下一階段接資料庫。</p>
+        <div className="row"><span>生活結餘</span><strong>{money(expenseBalance)}</strong></div>
+        <div className="row"><span>投資</span><strong>{money(totalInvestment)}</strong></div>
+        <div className="row"><span>現金流結餘</span><strong>{money(cashFlowBalance)}</strong></div>
         {isLoading ? <p className="muted">讀取中...</p> : null}
         {message ? <p className="muted">{message}</p> : null}
       </article>
 
-      {records.length === 0 && !isLoading ? (
+      <article className="card grid">
+        <button
+          className="row"
+          type="button"
+          onClick={() => setShowIncomes((value) => !value)}
+          style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}
+        >
+          <div>
+            <h2 style={{ margin: 0 }}>收入紀錄</h2>
+            <div className="muted">點一下看收入明細</div>
+          </div>
+          <strong>{money(totalIncome)}</strong>
+        </button>
+        {showIncomes ? (
+          <div className="grid">
+            {incomes.length === 0 ? <p className="muted">這個月份沒有收入資料</p> : null}
+            {Object.entries(groupedIncomes).map(([owner, ownerRecords]) => (
+              <div className="card grid" style={{ boxShadow: "none" }} key={owner}>
+                <div className="row"><strong>{ownerLabel(owner as "chris" | "wife", viewer)}</strong><strong>{money(ownerRecords.reduce((sum, record) => sum + record.amount, 0))}</strong></div>
+                {ownerRecords.map((record) => (
+                  <div className="row" key={record.id}>
+                    <span>{record.date.slice(5)}　{record.category}{record.note ? `・${record.note}` : ""}</span>
+                    <span className="muted">{money(record.amount)} <button className="btn secondary" type="button" onClick={() => handleDeleteIncome(record.id)} style={{ marginLeft: 8 }}>刪除</button></span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </article>
+
+      {expenses.length === 0 && !isLoading ? (
         <article className="card grid">
           <h2>尚無支出</h2>
           <p className="muted" style={{ margin: 0 }}>到「新增」頁儲存第一筆支出後，這裡就會出現正式資料。</p>
@@ -189,7 +265,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
                               <span>{record.date.slice(5)}　{record.isPrivate ? "個人雜支" : record.note || record.category}</span>
                               <span className="muted">
                                 {money(record.amount)}{record.creditCard ? `・${record.creditCard}` : ""}{record.target === "junyao" ? `・${displayPaidBy(record, viewer)}付` : ""}
-                                <button className="btn secondary" type="button" onClick={() => handleDelete(record.id)} style={{ marginLeft: 8 }}>刪除</button>
+                                <button className="btn secondary" type="button" onClick={() => handleDeleteExpense(record.id)} style={{ marginLeft: 8 }}>刪除</button>
                               </span>
                             </div>
                           ))}
@@ -203,6 +279,37 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           </article>
         );
       })}
+
+      <article className="card grid">
+        <button
+          className="row"
+          type="button"
+          onClick={() => setShowInvestments((value) => !value)}
+          style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}
+        >
+          <div>
+            <h2 style={{ margin: 0 }}>投資紀錄</h2>
+            <div className="muted">不列入生活支出，點一下看明細</div>
+          </div>
+          <strong>{money(totalInvestment)}</strong>
+        </button>
+        {showInvestments ? (
+          <div className="grid">
+            {investments.length === 0 ? <p className="muted">這個月份沒有投資紀錄</p> : null}
+            {Object.entries(groupedInvestments).map(([owner, ownerRecords]) => (
+              <div className="card grid" style={{ boxShadow: "none" }} key={owner}>
+                <div className="row"><strong>{ownerLabel(owner as "chris" | "wife", viewer)}</strong><strong>{money(ownerRecords.reduce((sum, record) => sum + record.amount, 0))}</strong></div>
+                {ownerRecords.map((record) => (
+                  <div className="row" key={record.id}>
+                    <span>{record.date.slice(5)}　{record.type}・{record.name}{record.note ? `・${record.note}` : ""}</span>
+                    <span className="muted">{money(record.amount)} <button className="btn secondary" type="button" onClick={() => handleDeleteInvestment(record.id)} style={{ marginLeft: 8 }}>刪除</button></span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </article>
 
       <article className="card grid">
         <button
