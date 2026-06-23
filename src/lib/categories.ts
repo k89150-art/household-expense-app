@@ -13,7 +13,6 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "電費",
   "瓦斯費",
   "網路費",
-  "訂閱",
   "娛樂",
   "衣物",
   "寵物",
