@@ -255,8 +255,9 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const paidNowExpense = expenses.filter((record) => record.paymentMethod !== "credit_card").reduce((sum, record) => sum + record.amount, 0);
   const totalInvestment = investments.reduce((sum, record) => sum + record.amount, 0);
   const totalAdvance = advances.reduce((sum, record) => sum + record.amount, 0);
+  const pendingAdvanceRecords = advances.filter((record) => record.status !== "已收回");
   const paidNowAdvance = advances.filter((record) => record.paymentMethod !== "credit_card").reduce((sum, record) => sum + record.amount, 0);
-  const pendingAdvance = advances.filter((record) => record.status !== "已收回").reduce((sum, record) => sum + record.amount, 0);
+  const pendingAdvance = pendingAdvanceRecords.reduce((sum, record) => sum + record.amount, 0);
   const reimbursedAdvance = advances.filter((record) => record.status === "已收回").reduce((sum, record) => sum + record.amount, 0);
   const cardPaymentTotal = cardPayments.reduce((sum, record) => sum + record.amount, 0);
   const availableBalance = totalIncome - paidNowExpense - paidNowAdvance - cardPaymentTotal - totalInvestment + reimbursedAdvance;
@@ -313,31 +314,6 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
                     <span className="muted">{money(record.amount)} <button className="btn secondary" type="button" onClick={() => handleDeleteIncome(record.id)} style={{ marginLeft: 8 }}>刪除</button></span>
                   </div>
                 ))}
-              </div>
-            ))}
-          </div>
-        ) : null}
-      </article>
-
-      <article className="card grid">
-        <button className="row" type="button" onClick={() => setShowAdvances((value) => !value)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
-          <div><h2 style={{ margin: 0 }}>代墊款</h2><div className="muted">不列入生活支出，點一下看核銷狀態</div></div>
-          <strong>{money(totalAdvance)}</strong>
-        </button>
-        <div className="row"><span>待收回</span><strong>{money(pendingAdvance)}</strong></div>
-        <div className="row"><span>已收回</span><strong>{money(reimbursedAdvance)}</strong></div>
-        {showAdvances ? (
-          <div className="grid">
-            {advances.length === 0 ? <p className="muted">這個月份沒有代墊款</p> : null}
-            {advances.map((record) => (
-              <div className="card grid" style={{ boxShadow: "none" }} key={record.id}>
-                <div className="row"><span>{record.date.slice(5)}　{record.item}{record.note ? `・${record.note}` : ""}</span><strong>{money(record.amount)}</strong></div>
-                <div className="muted">{record.status}{record.reimbursedDate ? `・收回日 ${record.reimbursedDate}` : ""}{record.creditCard ? `・${record.creditCard}` : ""}</div>
-                <div className="row">
-                  <button className="btn secondary" type="button" onClick={() => handleAdvanceStatus(record, "已送件")}>已送件</button>
-                  <button className="btn secondary" type="button" onClick={() => handleAdvanceStatus(record, "已收回")}>已收回</button>
-                  <button className="btn secondary" type="button" onClick={() => handleDeleteAdvance(record.id)}>刪除</button>
-                </div>
               </div>
             ))}
           </div>
@@ -473,6 +449,30 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           </div>
         ) : null}
       </article>
+
+      {pendingAdvance > 0 ? (
+        <article className="card grid">
+          <button className="row" type="button" onClick={() => setShowAdvances((value) => !value)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
+            <div><h2 style={{ margin: 0 }}>代墊款</h2><div className="muted">尚未銷帳時才顯示，點一下看明細</div></div>
+            <strong>{money(pendingAdvance)}</strong>
+          </button>
+          {showAdvances ? (
+            <div className="grid">
+              {pendingAdvanceRecords.map((record) => (
+                <div className="card grid" style={{ boxShadow: "none" }} key={record.id}>
+                  <div className="row"><span>{record.date.slice(5)}　{record.item}{record.note ? `・${record.note}` : ""}</span><strong>{money(record.amount)}</strong></div>
+                  <div className="muted">{record.status}{record.creditCard ? `・${record.creditCard}` : ""}</div>
+                  <div className="row">
+                    <button className="btn secondary" type="button" onClick={() => handleAdvanceStatus(record, "已送件")}>已送件</button>
+                    <button className="btn secondary" type="button" onClick={() => handleAdvanceStatus(record, "已收回")}>已收回</button>
+                    <button className="btn secondary" type="button" onClick={() => handleDeleteAdvance(record.id)}>刪除</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </article>
+      ) : null}
     </section>
   );
 }
