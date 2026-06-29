@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
 import { EXPENSE_CATEGORIES, HOME_FEE_ITEMS, PAYMENT_METHOD_LABELS, TAX_ITEMS } from "@/lib/categories";
-import { addExpenseRecord } from "@/lib/records";
+import { InstallmentScheduleItem, addExpenseRecord } from "@/lib/records";
 import { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
 
 type Props = {
@@ -31,6 +31,25 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function shiftMonth(yyyymm: string, diff: number) {
+  const [year, month] = yyyymm.split("-").map(Number);
+  const date = new Date(year, month - 1 + diff, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function splitInstallmentAmount(totalPayable: number, totalInstallments: number, firstBillMonth: string): InstallmentScheduleItem[] {
+  const baseAmount = Math.floor(totalPayable / totalInstallments);
+  return Array.from({ length: totalInstallments }, (_, index) => {
+    const installmentNo = index + 1;
+    const amount = installmentNo === totalInstallments ? totalPayable - baseAmount * (totalInstallments - 1) : baseAmount;
+    return {
+      billMonth: shiftMonth(firstBillMonth, index),
+      installmentNo,
+      amount,
+    };
+  });
+}
+
 export function ExpenseQuickForm({ viewer, onSaved }: Props) {
   const user = useCurrentUser();
   const selfTarget: PersonTarget = viewer === "chris" ? "chris" : "wife";
@@ -45,8 +64,9 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [creditCard, setCreditCard] = useState<CreditCardName>(creditCards[0]);
   const [isInstallment, setIsInstallment] = useState(false);
-  const [installmentCurrent, setInstallmentCurrent] = useState("1");
-  const [installmentTotal, setInstallmentTotal] = useState("3");
+  const [installmentTotal, setInstallmentTotal] = useState("6");
+  const [installmentFee, setInstallmentFee] = useState("0");
+  const [firstBillMonth, setFirstBillMonth] = useState(today().slice(0, 7));
   const [isPrivate, setIsPrivate] = useState(false);
   const [privateNote, setPrivateNote] = useState("");
   const [note, setNote] = useState("");
@@ -58,11 +78,23 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
     setCreditCard(creditCards[0]);
   }, [selfTarget, creditCards]);
 
+  useEffect(() => {
+    setFirstBillMonth(date.slice(0, 7));
+  }, [date]);
+
   const targetLabels: { value: PersonTarget; label: string }[] = [
     { value: selfTarget, label: VIEWER_LABEL[viewer] },
     { value: "junyao", label: "竣堯" },
     { value: "cat", label: "貓" },
   ];
+
+  const parsedAmount = Number(amount);
+  const parsedInstallmentTotal = Number(installmentTotal);
+  const parsedInstallmentFee = Number(installmentFee || 0);
+  const totalPayable = (parsedAmount || 0) + (parsedInstallmentFee || 0);
+  const installmentPreview = paymentMethod === "credit_card" && isInstallment && parsedAmount > 0 && parsedInstallmentTotal > 1
+    ? splitInstallmentAmount(totalPayable, parsedInstallmentTotal, firstBillMonth)
+    : [];
 
   function getSubItem() {
     if (category === "居家固定費") return homeFeeItem;
@@ -71,7 +103,6 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
   }
 
   async function handleSave() {
-    const parsedAmount = Number(amount);
     if (!user) {
       setMessage("請先登入。");
       return;
@@ -80,13 +111,28 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
       setMessage("請輸入正確金額。");
       return;
     }
+    if (isInstallment) {
+      if (paymentMethod !== "credit_card") {
+        setMessage("只有信用卡付款可以設定分期。");
+        return;
+      }
+      if (!parsedInstallmentTotal || parsedInstallmentTotal <= 1) {
+        setMessage("分期期數至少要 2 期。");
+        return;
+      }
+      if (parsedInstallmentFee < 0) {
+        setMessage("手續費或利息不可為負數。");
+        return;
+      }
+    }
 
     const paidBy = target === "junyao" && childPaidBy === "spouse"
       ? (viewer === "chris" ? "wife" : "chris")
       : viewer;
     const subItem = getSubItem();
+    const schedule = isInstallment ? splitInstallmentAmount(totalPayable, parsedInstallmentTotal, firstBillMonth) : [];
     const installmentNote = paymentMethod === "credit_card" && isInstallment
-      ? `分期 ${installmentCurrent}/${installmentTotal}`
+      ? `分期 ${parsedInstallmentTotal}期・總付款 ${totalPayable.toLocaleString("zh-TW")}${parsedInstallmentFee > 0 ? `・手續費/利息 ${parsedInstallmentFee.toLocaleString("zh-TW")}` : "・0利率"}`
       : "";
     const finalNote = [subItem, installmentNote, note.trim()].filter(Boolean).join("・") || undefined;
 
@@ -101,6 +147,14 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
         paidBy,
         paymentMethod,
         creditCard: paymentMethod === "credit_card" ? creditCard : undefined,
+        installment: paymentMethod === "credit_card" && isInstallment ? {
+          enabled: true,
+          total: parsedInstallmentTotal,
+          fee: parsedInstallmentFee,
+          totalPayable,
+          firstBillMonth,
+          schedule,
+        } : undefined,
         note: finalNote,
         isPrivate,
         privateNote: isPrivate ? privateNote.trim() || undefined : undefined,
@@ -109,6 +163,7 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
       setAmount("");
       setNote("");
       setPrivateNote("");
+      setInstallmentFee("0");
       setMessage("已儲存到資料庫。");
       onSaved?.();
     } catch (error) {
@@ -129,7 +184,7 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
       </label>
       <label className="field">
         <span>金額</span>
-        <input className="input" type="number" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="例如 120" />
+        <input className="input" type="number" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="例如 3000" />
       </label>
       <label className="field">
         <span>類別</span>
@@ -187,15 +242,31 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
             <span>信用卡分期</span>
           </label>
           {isInstallment ? (
-            <div className="row">
-              <label className="field" style={{ flex: 1 }}>
-                <span>第幾期</span>
-                <input className="input" type="number" min="1" inputMode="numeric" value={installmentCurrent} onChange={(event) => setInstallmentCurrent(event.target.value)} />
-              </label>
-              <label className="field" style={{ flex: 1 }}>
-                <span>共幾期</span>
+            <div className="card grid" style={{ boxShadow: "none" }}>
+              <label className="field">
+                <span>分期期數</span>
                 <input className="input" type="number" min="2" inputMode="numeric" value={installmentTotal} onChange={(event) => setInstallmentTotal(event.target.value)} />
               </label>
+              <label className="field">
+                <span>手續費 / 利息總額</span>
+                <input className="input" type="number" min="0" inputMode="decimal" value={installmentFee} onChange={(event) => setInstallmentFee(event.target.value)} placeholder="0 利率就填 0" />
+              </label>
+              <label className="field">
+                <span>第一期帳單月份</span>
+                <input className="input" type="month" value={firstBillMonth} onChange={(event) => setFirstBillMonth(event.target.value)} />
+              </label>
+              {installmentPreview.length > 0 ? (
+                <div className="grid">
+                  <strong>分期預覽</strong>
+                  <div className="muted">總付款 {totalPayable.toLocaleString("zh-TW")}，共 {parsedInstallmentTotal} 期。</div>
+                  {installmentPreview.map((item) => (
+                    <div className="row" key={`${item.billMonth}-${item.installmentNo}`}>
+                      <span>{item.billMonth}　第 {item.installmentNo} 期</span>
+                      <strong>${item.amount.toLocaleString("zh-TW")}</strong>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </>
