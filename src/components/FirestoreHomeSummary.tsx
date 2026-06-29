@@ -9,6 +9,11 @@ import {
   deleteExpenseRecord,
   deleteIncomeRecord,
   deleteInvestmentRecord,
+  getAllAdvanceRecords,
+  getAllCardPaymentRecords,
+  getAllExpenseRecords,
+  getAllIncomeRecords,
+  getAllInvestmentRecords,
   getAdvanceRecordsByMonth,
   getCardPaymentRecordsByBillMonth,
   getCardPaymentRecordsByMonth,
@@ -189,17 +194,16 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     setIsLoading(true);
     setMessage("");
     try {
-      const targetMonth = scope === "month" ? selectedMonth : currentMonth();
-      const dueBillMonth = shiftMonth(targetMonth, -1);
+      const dueBillMonth = shiftMonth(selectedMonth, -1);
       const [expenseData, incomeData, investmentData, advanceData, dueExpenseData, dueAdvanceData, allCardExpenseData, paymentData, duePaymentData] = await Promise.all([
-        getExpenseRecordsByMonth(targetMonth),
-        getIncomeRecordsByMonth(targetMonth),
-        getInvestmentRecordsByMonth(targetMonth),
-        getAdvanceRecordsByMonth(targetMonth),
+        scope === "month" ? getExpenseRecordsByMonth(selectedMonth) : getAllExpenseRecords(),
+        scope === "month" ? getIncomeRecordsByMonth(selectedMonth) : getAllIncomeRecords(),
+        scope === "month" ? getInvestmentRecordsByMonth(selectedMonth) : getAllInvestmentRecords(),
+        scope === "month" ? getAdvanceRecordsByMonth(selectedMonth) : getAllAdvanceRecords(),
         getExpenseRecordsByMonth(dueBillMonth),
         getAdvanceRecordsByMonth(dueBillMonth),
         getCreditCardExpenseRecords(),
-        getCardPaymentRecordsByMonth(targetMonth),
+        scope === "month" ? getCardPaymentRecordsByMonth(selectedMonth) : getAllCardPaymentRecords(),
         getCardPaymentRecordsByBillMonth(dueBillMonth),
       ]);
       setExpenses(expenseData);
@@ -294,7 +298,6 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const totalIncome = incomes.reduce((sum, record) => sum + record.amount, 0);
   const paidNowExpense = expenses.filter((record) => record.paymentMethod !== "credit_card").reduce((sum, record) => sum + record.amount, 0);
   const totalInvestment = investments.reduce((sum, record) => sum + record.amount, 0);
-  const totalAdvance = advances.reduce((sum, record) => sum + record.amount, 0);
   const pendingAdvanceRecords = advances.filter((record) => record.status !== "已收回");
   const paidNowAdvance = advances.filter((record) => record.paymentMethod !== "credit_card").reduce((sum, record) => sum + record.amount, 0);
   const pendingAdvance = pendingAdvanceRecords.reduce((sum, record) => sum + record.amount, 0);

@@ -101,6 +101,16 @@ export type CardPaymentRecord = {
   updatedAt?: unknown;
 };
 
+export type PrivateExpenseDetailRecord = {
+  id: string;
+  householdId: string;
+  expenseId: string;
+  ownerId: string;
+  privateNote: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+};
+
 export type NewExpenseInput = Omit<ExpenseRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
 export type NewIncomeInput = Omit<IncomeRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
 export type NewInvestmentInput = Omit<InvestmentRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
@@ -115,12 +125,13 @@ function removeUndefinedFields<T extends Record<string, unknown>>(value: T) {
 
 async function addRecord(collectionName: string, input: Record<string, unknown>) {
   const collectionRef = collection(db, "households", HOUSEHOLD_ID, collectionName);
-  await addDoc(collectionRef, removeUndefinedFields({
+  const docRef = await addDoc(collectionRef, removeUndefinedFields({
     ...input,
     householdId: HOUSEHOLD_ID,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   }));
+  return docRef.id;
 }
 
 async function getRecordsByMonth<T>(collectionName: string, month: string) {
@@ -129,12 +140,31 @@ async function getRecordsByMonth<T>(collectionName: string, month: string) {
   return snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() })) as T[];
 }
 
+async function getAllRecords<T>(collectionName: string) {
+  const collectionRef = collection(db, "households", HOUSEHOLD_ID, collectionName);
+  const snapshot = await getDocs(query(collectionRef, orderBy("date", "desc")));
+  return snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() })) as T[];
+}
+
 export async function addExpenseRecord(input: NewExpenseInput) {
-  await addRecord("expenses", input);
+  const { privateNote, ...publicExpense } = input;
+  const expenseId = await addRecord("expenses", publicExpense);
+
+  if (input.isPrivate && privateNote?.trim()) {
+    await addRecord("privateExpenseDetails", {
+      expenseId,
+      ownerId: input.createdBy,
+      privateNote: privateNote.trim(),
+    });
+  }
 }
 
 export async function getExpenseRecordsByMonth(month: string) {
   return getRecordsByMonth<ExpenseRecord>("expenses", month);
+}
+
+export async function getAllExpenseRecords() {
+  return getAllRecords<ExpenseRecord>("expenses");
 }
 
 export async function getCreditCardExpenseRecords() {
@@ -163,6 +193,10 @@ export async function getIncomeRecordsByMonth(month: string) {
   return getRecordsByMonth<IncomeRecord>("incomes", month);
 }
 
+export async function getAllIncomeRecords() {
+  return getAllRecords<IncomeRecord>("incomes");
+}
+
 export async function deleteIncomeRecord(id: string) {
   const docRef = doc(db, "households", HOUSEHOLD_ID, "incomes", id);
   await deleteDoc(docRef);
@@ -176,6 +210,10 @@ export async function getInvestmentRecordsByMonth(month: string) {
   return getRecordsByMonth<InvestmentRecord>("investments", month);
 }
 
+export async function getAllInvestmentRecords() {
+  return getAllRecords<InvestmentRecord>("investments");
+}
+
 export async function deleteInvestmentRecord(id: string) {
   const docRef = doc(db, "households", HOUSEHOLD_ID, "investments", id);
   await deleteDoc(docRef);
@@ -187,6 +225,10 @@ export async function addAdvanceRecord(input: NewAdvanceInput) {
 
 export async function getAdvanceRecordsByMonth(month: string) {
   return getRecordsByMonth<AdvanceRecord>("advances", month);
+}
+
+export async function getAllAdvanceRecords() {
+  return getAllRecords<AdvanceRecord>("advances");
 }
 
 export async function updateAdvanceRecord(id: string, input: Partial<NewAdvanceInput>) {
@@ -205,6 +247,10 @@ export async function addCardPaymentRecord(input: NewCardPaymentInput) {
 
 export async function getCardPaymentRecordsByMonth(month: string) {
   return getRecordsByMonth<CardPaymentRecord>("cardPayments", month);
+}
+
+export async function getAllCardPaymentRecords() {
+  return getAllRecords<CardPaymentRecord>("cardPayments");
 }
 
 export async function getCardPaymentRecordsByBillMonth(month: string) {
