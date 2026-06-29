@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
+import { firebaseProjectId } from "@/lib/firebase";
 import {
   addCardPaymentRecord,
   deleteAdvanceRecord,
@@ -168,6 +169,13 @@ function statusBadge(isPaid: boolean) {
   return <span style={{ color: isPaid ? "#16803C" : "#C53030", fontWeight: 700 }}>{isPaid ? "已繳款" : "未繳款"}</span>;
 }
 
+function getErrorCode(error: unknown) {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    return String((error as { code?: unknown }).code);
+  }
+  return "unknown";
+}
+
 export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const user = useCurrentUser();
   const [selectedMonth, setSelectedMonth] = useState(currentMonth());
@@ -217,7 +225,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       setDueBillPayments(duePaymentData);
     } catch (error) {
       console.error(error);
-      setMessage("讀取資料失敗。請確認 Firestore Database 已建立，且安全規則已允許登入使用者讀取。");
+      setMessage(`讀取資料失敗：${getErrorCode(error)}。Project: ${firebaseProjectId}，UID: ${user?.uid ?? "未登入"}。請確認這個 UID 有放在 households/default-household 的 memberIds。`);
     } finally {
       setIsLoading(false);
     }

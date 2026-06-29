@@ -2,7 +2,7 @@
 
 import { ReactNode, createContext, useContext, useEffect, useState } from "react";
 import { GoogleAuthProvider, User, onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth, firebaseProjectId } from "@/lib/firebase";
 
 type Props = {
   children: ReactNode;
@@ -72,6 +72,8 @@ export function AuthGate({ children }: Props) {
           <div>
             <strong>{user.displayName ?? user.email}</strong>
             <div className="muted">{user.email}</div>
+            <div className="muted">Project: {firebaseProjectId}</div>
+            <div className="muted">UID: {user.uid}</div>
           </div>
           <button className="btn secondary" type="button" onClick={handleSignOut}>登出</button>
         </div>
