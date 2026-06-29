@@ -5,18 +5,19 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "交通",
   "生活用品",
   "醫療",
-  "管理費",
-  "水費",
-  "電費",
-  "瓦斯費",
+  "居家固定費",
   "網路費",
   "娛樂",
   "衣物",
   "寵物",
   "保健食品",
+  "稅金",
   "個人雜支",
   "其他",
 ];
+
+export const HOME_FEE_ITEMS = ["水費", "電費", "瓦斯費", "管理費"] as const;
+export const TAX_ITEMS = ["牌照稅", "房屋稅", "所得稅", "燃料稅", "地價稅"] as const;
 
 export const TARGET_LABELS = {
   chris: "我",
