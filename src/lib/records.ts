@@ -6,6 +6,21 @@ import { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
 export type CreditCardName = "玉山" | "台新" | "國泰" | "中信" | "保費卡";
 export type OwnerKey = "chris" | "wife";
 
+export type InstallmentScheduleItem = {
+  billMonth: string;
+  installmentNo: number;
+  amount: number;
+};
+
+export type InstallmentInfo = {
+  enabled: true;
+  total: number;
+  fee: number;
+  totalPayable: number;
+  firstBillMonth: string;
+  schedule: InstallmentScheduleItem[];
+};
+
 export type ExpenseRecord = {
   id: string;
   householdId: string;
@@ -16,6 +31,7 @@ export type ExpenseRecord = {
   paidBy: OwnerKey;
   paymentMethod: PaymentMethod;
   creditCard?: CreditCardName;
+  installment?: InstallmentInfo;
   note?: string;
   isPrivate: boolean;
   privateNote?: string;
@@ -119,6 +135,14 @@ export async function addExpenseRecord(input: NewExpenseInput) {
 
 export async function getExpenseRecordsByMonth(month: string) {
   return getRecordsByMonth<ExpenseRecord>("expenses", month);
+}
+
+export async function getCreditCardExpenseRecords() {
+  const collectionRef = collection(db, "households", HOUSEHOLD_ID, "expenses");
+  const snapshot = await getDocs(query(collectionRef, where("paymentMethod", "==", "credit_card")));
+  return snapshot.docs
+    .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as ExpenseRecord)
+    .sort((a, b) => b.date.localeCompare(a.date));
 }
 
 export async function updateExpenseRecord(id: string, input: Partial<NewExpenseInput>) {
