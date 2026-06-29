@@ -18,6 +18,7 @@ import {
   getAdvanceRecordsByMonth,
   getCardPaymentRecordsByBillMonth,
   getCardPaymentRecordsByMonth,
+  getCreditCardExpenseRecords,
   getExpenseRecordsByMonth,
   getIncomeRecordsByMonth,
   getInvestmentRecordsByMonth,
@@ -87,19 +88,51 @@ function groupByCategory(records: ExpenseRecord[]) {
   }, {});
 }
 
-type CardLine = { date: string; label: string; amount: number; kind: "expense" | "advance" };
+type CardLine = { date: string; label: string; amount: number; kind: "expense" | "advance" | "installment" };
+
+function addCardLine(groups: Record<string, CardLine[]>, card: string, line: CardLine) {
+  groups[card] = [...(groups[card] ?? []), line];
+}
 
 function groupByCreditCard(records: ExpenseRecord[], advances: AdvanceRecord[]) {
   const groups: Record<string, CardLine[]> = {};
 
   records.filter((record) => record.paymentMethod === "credit_card" && record.creditCard).forEach((record) => {
     const card = record.creditCard ?? "未指定";
-    groups[card] = [...(groups[card] ?? []), { date: record.date, label: record.note || record.category, amount: record.amount, kind: "expense" }];
+    addCardLine(groups, card, { date: record.date, label: record.note || record.category, amount: record.amount, kind: "expense" });
   });
 
   advances.filter((record) => record.paymentMethod === "credit_card" && record.creditCard).forEach((record) => {
     const card = record.creditCard ?? "未指定";
-    groups[card] = [...(groups[card] ?? []), { date: record.date, label: `代墊・${record.item}`, amount: record.amount, kind: "advance" }];
+    addCardLine(groups, card, { date: record.date, label: `代墊・${record.item}`, amount: record.amount, kind: "advance" });
+  });
+
+  return groups;
+}
+
+function groupDueCreditCardBills(normalBillRecords: ExpenseRecord[], billAdvances: AdvanceRecord[], allCardRecords: ExpenseRecord[], billMonth: string) {
+  const groups: Record<string, CardLine[]> = {};
+
+  normalBillRecords.filter((record) => record.paymentMethod === "credit_card" && record.creditCard && !record.installment?.enabled).forEach((record) => {
+    const card = record.creditCard ?? "未指定";
+    addCardLine(groups, card, { date: record.date, label: record.note || record.category, amount: record.amount, kind: "expense" });
+  });
+
+  billAdvances.filter((record) => record.paymentMethod === "credit_card" && record.creditCard).forEach((record) => {
+    const card = record.creditCard ?? "未指定";
+    addCardLine(groups, card, { date: record.date, label: `代墊・${record.item}`, amount: record.amount, kind: "advance" });
+  });
+
+  allCardRecords.filter((record) => record.creditCard && record.installment?.enabled).forEach((record) => {
+    const matched = record.installment?.schedule.find((item) => item.billMonth === billMonth);
+    if (!matched) return;
+    const card = record.creditCard ?? "未指定";
+    addCardLine(groups, card, {
+      date: `${matched.billMonth}-01`,
+      label: `${record.category}・分期 ${matched.installmentNo}/${record.installment.total}${record.note ? `・${record.note}` : ""}`,
+      amount: matched.amount,
+      kind: "installment",
+    });
   });
 
   return groups;
@@ -135,6 +168,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [advances, setAdvances] = useState<AdvanceRecord[]>([]);
   const [dueExpenses, setDueExpenses] = useState<ExpenseRecord[]>([]);
   const [dueAdvances, setDueAdvances] = useState<AdvanceRecord[]>([]);
+  const [allCreditCardExpenses, setAllCreditCardExpenses] = useState<ExpenseRecord[]>([]);
   const [cardPayments, setCardPayments] = useState<CardPaymentRecord[]>([]);
   const [dueBillPayments, setDueBillPayments] = useState<CardPaymentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -152,13 +186,14 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     try {
       const targetMonth = scope === "month" ? selectedMonth : currentMonth();
       const dueBillMonth = shiftMonth(targetMonth, -1);
-      const [expenseData, incomeData, investmentData, advanceData, dueExpenseData, dueAdvanceData, paymentData, duePaymentData] = await Promise.all([
+      const [expenseData, incomeData, investmentData, advanceData, dueExpenseData, dueAdvanceData, allCardExpenseData, paymentData, duePaymentData] = await Promise.all([
         getExpenseRecordsByMonth(targetMonth),
         getIncomeRecordsByMonth(targetMonth),
         getInvestmentRecordsByMonth(targetMonth),
         getAdvanceRecordsByMonth(targetMonth),
         getExpenseRecordsByMonth(dueBillMonth),
         getAdvanceRecordsByMonth(dueBillMonth),
+        getCreditCardExpenseRecords(),
         getCardPaymentRecordsByMonth(targetMonth),
         getCardPaymentRecordsByBillMonth(dueBillMonth),
       ]);
@@ -168,6 +203,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       setAdvances(advanceData);
       setDueExpenses(dueExpenseData);
       setDueAdvances(dueAdvanceData);
+      setAllCreditCardExpenses(allCardExpenseData);
       setCardPayments(paymentData);
       setDueBillPayments(duePaymentData);
     } catch (error) {
@@ -251,7 +287,6 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
 
   const dueBillMonth = shiftMonth(selectedMonth, -1);
   const totalIncome = incomes.reduce((sum, record) => sum + record.amount, 0);
-  const totalExpense = expenses.reduce((sum, record) => sum + record.amount, 0);
   const paidNowExpense = expenses.filter((record) => record.paymentMethod !== "credit_card").reduce((sum, record) => sum + record.amount, 0);
   const totalInvestment = investments.reduce((sum, record) => sum + record.amount, 0);
   const totalAdvance = advances.reduce((sum, record) => sum + record.amount, 0);
@@ -261,13 +296,11 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const reimbursedAdvance = advances.filter((record) => record.status === "已收回").reduce((sum, record) => sum + record.amount, 0);
   const cardPaymentTotal = cardPayments.reduce((sum, record) => sum + record.amount, 0);
   const availableBalance = totalIncome - paidNowExpense - paidNowAdvance - cardPaymentTotal - totalInvestment + reimbursedAdvance;
-  const expenseBalance = totalIncome - totalExpense;
   const groupedTargets = useMemo(() => groupByTarget(expenses), [expenses]);
   const groupedIncomes = useMemo(() => groupByOwner(incomes), [incomes]);
   const groupedInvestments = useMemo(() => groupByOwner(investments), [investments]);
   const creditCardGroups = useMemo(() => groupByCreditCard(expenses, advances), [expenses, advances]);
-  const dueCreditCardGroups = useMemo(() => groupByCreditCard(dueExpenses, dueAdvances), [dueExpenses, dueAdvances]);
-  const creditCardTotal = Object.values(creditCardGroups).flat().reduce((sum, record) => sum + record.amount, 0);
+  const dueCreditCardGroups = useMemo(() => groupDueCreditCardBills(dueExpenses, dueAdvances, allCreditCardExpenses, dueBillMonth), [dueExpenses, dueAdvances, allCreditCardExpenses, dueBillMonth]);
   const dueCreditCardTotal = Object.values(dueCreditCardGroups).flat().reduce((sum, record) => sum + record.amount, 0);
 
   return (
@@ -410,6 +443,12 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
                     {payment ? <div className="muted">繳款日：{payment.paidDate}・{money(payment.amount)}</div> : null}
                     {!isPaid ? <button className="btn" type="button" onClick={() => handleCreateCardPayment(card, cardTotal, dueBillMonth)}>建立繳款紀錄</button> : null}
                     {payment ? <button className="btn secondary" type="button" onClick={() => handleDeleteCardPayment(payment.id)}>取消繳款紀錄</button> : null}
+                    {cardRecords.map((record, index) => (
+                      <div className="row" key={`${card}-${record.date}-${index}`}>
+                        <span>{record.date.slice(5)}　{record.label}</span>
+                        <span className="muted">{money(record.amount)}{record.kind === "advance" ? "・代墊" : ""}{record.kind === "installment" ? "・分期" : ""}</span>
+                      </div>
+                    ))}
                   </div>
                 );
               })}
@@ -417,7 +456,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
 
             <div className="card grid" style={{ boxShadow: "none" }}>
               <strong>本月刷卡核對（{monthLabel(selectedMonth)}消費）</strong>
-              <div className="muted">這裡是本月刷卡明細，通常會成為下個月應繳帳單。</div>
+              <div className="muted">這裡是本月刷卡明細；分期消費會在應繳帳單依每期金額出現。</div>
               {Object.keys(creditCardGroups).length === 0 ? <p className="muted">這個月份沒有信用卡消費</p> : null}
               {Object.entries(creditCardGroups).map(([card, cardRecords]) => {
                 const cardTotal = cardRecords.reduce((sum, record) => sum + record.amount, 0);
