@@ -1,16 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useCurrentUser } from "@/components/AuthGate";
 import {
   AdvanceRecord,
+  CardPaymentRecord,
+  CreditCardName,
   ExpenseRecord,
   IncomeRecord,
   InvestmentRecord,
+  addCardPaymentRecord,
   deleteAdvanceRecord,
+  deleteCardPaymentRecord,
   deleteExpenseRecord,
   deleteIncomeRecord,
   deleteInvestmentRecord,
   getAdvanceRecordsByMonth,
+  getCardPaymentRecordsByBillMonth,
+  getCardPaymentRecordsByMonth,
   getExpenseRecordsByMonth,
   getIncomeRecordsByMonth,
   getInvestmentRecordsByMonth,
@@ -80,8 +87,10 @@ function groupByCategory(records: ExpenseRecord[]) {
   }, {});
 }
 
+type CardLine = { date: string; label: string; amount: number; kind: "expense" | "advance" };
+
 function groupByCreditCard(records: ExpenseRecord[], advances: AdvanceRecord[]) {
-  const groups: Record<string, { date: string; label: string; amount: number; kind: "expense" | "advance" }[]> = {};
+  const groups: Record<string, CardLine[]> = {};
 
   records.filter((record) => record.paymentMethod === "credit_card" && record.creditCard).forEach((record) => {
     const card = record.creditCard ?? "未指定";
@@ -108,13 +117,24 @@ function ownerLabel(owner: "chris" | "wife", viewer: Viewer) {
   return viewer === "wife" ? "我" : "太太";
 }
 
+function statusBadge(isPaid: boolean) {
+  return (
+    <span style={{ color: isPaid ? "#16803C" : "#C53030", fontWeight: 700 }}>
+      {isPaid ? "已繳款" : "未繳款"}
+    </span>
+  );
+}
+
 export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
+  const user = useCurrentUser();
   const [selectedMonth, setSelectedMonth] = useState(currentMonth());
   const [scope, setScope] = useState<Scope>("month");
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [incomes, setIncomes] = useState<IncomeRecord[]>([]);
   const [investments, setInvestments] = useState<InvestmentRecord[]>([]);
   const [advances, setAdvances] = useState<AdvanceRecord[]>([]);
+  const [cardPayments, setCardPayments] = useState<CardPaymentRecord[]>([]);
+  const [billPayments, setBillPayments] = useState<CardPaymentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [openedTarget, setOpenedTarget] = useState<string | null>(null);
   const [openedCategory, setOpenedCategory] = useState<string | null>(null);
@@ -129,16 +149,20 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     setMessage("");
     try {
       const targetMonth = scope === "month" ? selectedMonth : currentMonth();
-      const [expenseData, incomeData, investmentData, advanceData] = await Promise.all([
+      const [expenseData, incomeData, investmentData, advanceData, paymentData, billPaymentData] = await Promise.all([
         getExpenseRecordsByMonth(targetMonth),
         getIncomeRecordsByMonth(targetMonth),
         getInvestmentRecordsByMonth(targetMonth),
         getAdvanceRecordsByMonth(targetMonth),
+        getCardPaymentRecordsByMonth(targetMonth),
+        getCardPaymentRecordsByBillMonth(targetMonth),
       ]);
       setExpenses(expenseData);
       setIncomes(incomeData);
       setInvestments(investmentData);
       setAdvances(advanceData);
+      setCardPayments(paymentData);
+      setBillPayments(billPaymentData);
     } catch (error) {
       console.error(error);
       setMessage("讀取資料失敗。請確認 Firestore Database 已建立，且安全規則已允許登入使用者讀取。");
@@ -190,13 +214,44 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     await loadRecords();
   }
 
+  async function handleCreateCardPayment(card: string, amount: number) {
+    if (!user) {
+      setMessage("請先登入。");
+      return;
+    }
+    const ok = window.confirm(`確定要建立 ${card} ${selectedMonth} 帳單繳款 ${money(amount)} 嗎？`);
+    if (!ok) return;
+    await addCardPaymentRecord({
+      date: today(),
+      amount,
+      owner: viewer,
+      card: card as CreditCardName,
+      billMonth: selectedMonth,
+      status: "已繳款",
+      paidDate: today(),
+      note: `${selectedMonth} ${card}帳單繳款`,
+      createdBy: user.uid,
+    });
+    await loadRecords();
+  }
+
+  async function handleDeleteCardPayment(id: string) {
+    const ok = window.confirm("確定要取消這筆信用卡繳款紀錄嗎？");
+    if (!ok) return;
+    await deleteCardPaymentRecord(id);
+    await loadRecords();
+  }
+
   const totalIncome = incomes.reduce((sum, record) => sum + record.amount, 0);
   const totalExpense = expenses.reduce((sum, record) => sum + record.amount, 0);
+  const paidNowExpense = expenses.filter((record) => record.paymentMethod !== "credit_card").reduce((sum, record) => sum + record.amount, 0);
   const totalInvestment = investments.reduce((sum, record) => sum + record.amount, 0);
   const totalAdvance = advances.reduce((sum, record) => sum + record.amount, 0);
+  const paidNowAdvance = advances.filter((record) => record.paymentMethod !== "credit_card").reduce((sum, record) => sum + record.amount, 0);
   const pendingAdvance = advances.filter((record) => record.status !== "已收回").reduce((sum, record) => sum + record.amount, 0);
   const reimbursedAdvance = advances.filter((record) => record.status === "已收回").reduce((sum, record) => sum + record.amount, 0);
-  const cashFlowBalance = totalIncome - totalExpense - totalInvestment;
+  const cardPaymentTotal = cardPayments.reduce((sum, record) => sum + record.amount, 0);
+  const availableBalance = totalIncome - paidNowExpense - paidNowAdvance - cardPaymentTotal - totalInvestment + reimbursedAdvance;
   const expenseBalance = totalIncome - totalExpense;
   const groupedTargets = useMemo(() => groupByTarget(expenses), [expenses]);
   const groupedIncomes = useMemo(() => groupByOwner(incomes), [incomes]);
@@ -219,12 +274,14 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       </article>
 
       <article className="card grid">
-        <h2>{scope === "month" ? "當月總結" : "目前月份總結"}</h2>
-        <div className="row"><span>總收入</span><strong>{money(totalIncome)}</strong></div>
-        <div className="row"><span>總支出</span><strong>{money(totalExpense)}</strong></div>
-        <div className="row"><span>生活結餘</span><strong>{money(expenseBalance)}</strong></div>
+        <h2>{scope === "month" ? "本月剩餘可用金額" : "目前月份剩餘可用金額"}</h2>
+        <div className="row"><span>可用剩餘</span><strong>{money(availableBalance)}</strong></div>
+        <div className="row"><span>本月收入</span><strong>{money(totalIncome)}</strong></div>
+        <div className="row"><span>已付生活支出</span><strong>{money(paidNowExpense)}</strong></div>
+        <div className="row"><span>信用卡繳款</span><strong>{money(cardPaymentTotal)}</strong></div>
         <div className="row"><span>投資</span><strong>{money(totalInvestment)}</strong></div>
-        <div className="row"><span>現金流結餘</span><strong>{money(cashFlowBalance)}</strong></div>
+        <div className="row"><span>代墊款現金流</span><strong>{money(paidNowAdvance - reimbursedAdvance)}</strong></div>
+        <p className="muted" style={{ margin: 0 }}>信用卡消費先在信用卡核對，按已繳款後才會扣可用剩餘。</p>
         {isLoading ? <p className="muted">讀取中...</p> : null}
         {message ? <p className="muted">{message}</p> : null}
       </article>
@@ -264,10 +321,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
             {advances.length === 0 ? <p className="muted">這個月份沒有代墊款</p> : null}
             {advances.map((record) => (
               <div className="card grid" style={{ boxShadow: "none" }} key={record.id}>
-                <div className="row">
-                  <span>{record.date.slice(5)}　{record.item}{record.note ? `・${record.note}` : ""}</span>
-                  <strong>{money(record.amount)}</strong>
-                </div>
+                <div className="row"><span>{record.date.slice(5)}　{record.item}{record.note ? `・${record.note}` : ""}</span><strong>{money(record.amount)}</strong></div>
                 <div className="muted">{record.status}{record.reimbursedDate ? `・收回日 ${record.reimbursedDate}` : ""}{record.creditCard ? `・${record.creditCard}` : ""}</div>
                 <div className="row">
                   <button className="btn secondary" type="button" onClick={() => handleAdvanceStatus(record, "已送件")}>已送件</button>
@@ -351,16 +405,22 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
 
       <article className="card grid">
         <button className="row" type="button" onClick={() => setShowCreditCards((value) => !value)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
-          <div><h2 style={{ margin: 0 }}>信用卡核對</h2><div className="muted">包含一般支出與代墊刷卡</div></div>
+          <div><h2 style={{ margin: 0 }}>信用卡核對</h2><div className="muted">刷卡先核對，繳款後才扣可用剩餘</div></div>
           <strong>{money(creditCardTotal)}</strong>
         </button>
         {showCreditCards ? (
           <div className="grid">
             {Object.entries(creditCardGroups).map(([card, cardRecords]) => {
               const cardTotal = cardRecords.reduce((sum, record) => sum + record.amount, 0);
+              const payment = billPayments.find((item) => item.card === card);
+              const isPaid = Boolean(payment);
               return (
                 <div className="card grid" style={{ boxShadow: "none" }} key={card}>
                   <div className="row"><strong>{card}</strong><strong>{money(cardTotal)}</strong></div>
+                  <div className="row"><span>狀態</span>{statusBadge(isPaid)}</div>
+                  {payment ? <div className="muted">繳款日：{payment.paidDate}・{money(payment.amount)}</div> : null}
+                  {!isPaid ? <button className="btn" type="button" onClick={() => handleCreateCardPayment(card, cardTotal)}>建立繳款紀錄</button> : null}
+                  {payment ? <button className="btn secondary" type="button" onClick={() => handleDeleteCardPayment(payment.id)}>取消繳款紀錄</button> : null}
                   {cardRecords.map((record, index) => (
                     <div className="row" key={`${card}-${record.date}-${index}`}>
                       <span>{record.date.slice(5)}　{record.label}</span>
@@ -370,6 +430,17 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
                 </div>
               );
             })}
+            {cardPayments.length > 0 ? (
+              <div className="card grid" style={{ boxShadow: "none" }}>
+                <strong>本月已繳信用卡</strong>
+                {cardPayments.map((payment) => (
+                  <div className="row" key={payment.id}>
+                    <span>{payment.date.slice(5)}　{payment.card}・{payment.billMonth}帳單</span>
+                    <span className="muted">{money(payment.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </article>
