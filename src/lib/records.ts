@@ -136,13 +136,19 @@ async function addRecord(collectionName: string, input: Record<string, unknown>)
 
 async function getRecordsByMonth<T>(collectionName: string, month: string) {
   const collectionRef = collection(db, "households", HOUSEHOLD_ID, collectionName);
-  const snapshot = await getDocs(query(collectionRef, where("date", ">=", `${month}-01`), where("date", "<=", `${month}-31`), orderBy("date", "desc")));
+  const snapshot = await getDocs(query(
+    collectionRef,
+    where("householdId", "==", HOUSEHOLD_ID),
+    where("date", ">=", `${month}-01`),
+    where("date", "<=", `${month}-31`),
+    orderBy("date", "desc"),
+  ));
   return snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() })) as T[];
 }
 
 async function getAllRecords<T>(collectionName: string) {
   const collectionRef = collection(db, "households", HOUSEHOLD_ID, collectionName);
-  const snapshot = await getDocs(query(collectionRef, orderBy("date", "desc")));
+  const snapshot = await getDocs(query(collectionRef, where("householdId", "==", HOUSEHOLD_ID), orderBy("date", "desc")));
   return snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() })) as T[];
 }
 
@@ -169,7 +175,7 @@ export async function getAllExpenseRecords() {
 
 export async function getCreditCardExpenseRecords() {
   const collectionRef = collection(db, "households", HOUSEHOLD_ID, "expenses");
-  const snapshot = await getDocs(query(collectionRef, where("paymentMethod", "==", "credit_card")));
+  const snapshot = await getDocs(query(collectionRef, where("householdId", "==", HOUSEHOLD_ID), where("paymentMethod", "==", "credit_card")));
   return snapshot.docs
     .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as ExpenseRecord)
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -255,7 +261,7 @@ export async function getAllCardPaymentRecords() {
 
 export async function getCardPaymentRecordsByBillMonth(month: string) {
   const collectionRef = collection(db, "households", HOUSEHOLD_ID, "cardPayments");
-  const snapshot = await getDocs(query(collectionRef, where("billMonth", "==", month)));
+  const snapshot = await getDocs(query(collectionRef, where("householdId", "==", HOUSEHOLD_ID), where("billMonth", "==", month)));
   return snapshot.docs
     .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as CardPaymentRecord)
     .sort((a, b) => b.date.localeCompare(a.date));
