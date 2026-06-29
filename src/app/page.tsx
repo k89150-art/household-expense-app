@@ -36,19 +36,7 @@ function HouseholdApp() {
         <p className="muted" style={{ margin: 0 }}>目前帳號：{viewer === "chris" ? "我的手機" : "太太手機"}</p>
       </header>
 
-      {activeTab === "home" ? (
-        <>
-          <FirestoreHomeSummary viewer={viewer} refreshKey={refreshKey} />
-          <section className="card grid">
-            <h2>快速操作</h2>
-            <button className="btn" type="button" onClick={() => { setActiveTab("add"); setAddMode("expense"); }}>新增支出</button>
-            <button className="btn secondary" type="button" onClick={() => { setActiveTab("add"); setAddMode("income"); }}>新增收入</button>
-            <button className="btn secondary" type="button" onClick={() => { setActiveTab("add"); setAddMode("investment"); }}>新增投資紀錄</button>
-            <button className="btn secondary" type="button" onClick={() => { setActiveTab("add"); setAddMode("advance"); }}>新增代墊款</button>
-            <button className="btn secondary" type="button" onClick={() => setActiveTab("fixed")}>固定支出{viewer === "chris" ? "與午餐餘額" : ""}</button>
-          </section>
-        </>
-      ) : null}
+      {activeTab === "home" ? <FirestoreHomeSummary viewer={viewer} refreshKey={refreshKey} /> : null}
 
       {activeTab === "add" ? (
         <section className="grid">
