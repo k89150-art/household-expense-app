@@ -69,10 +69,27 @@ export type AdvanceRecord = {
   updatedAt?: unknown;
 };
 
+export type CardPaymentRecord = {
+  id: string;
+  householdId: string;
+  date: string;
+  amount: number;
+  owner: OwnerKey;
+  card: CreditCardName;
+  billMonth: string;
+  status: "已繳款";
+  paidDate: string;
+  note?: string;
+  createdBy: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+};
+
 export type NewExpenseInput = Omit<ExpenseRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
 export type NewIncomeInput = Omit<IncomeRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
 export type NewInvestmentInput = Omit<InvestmentRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
 export type NewAdvanceInput = Omit<AdvanceRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
+export type NewCardPaymentInput = Omit<CardPaymentRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
 
 type FirestoreWritable = Record<string, string | number | boolean | unknown>;
 
@@ -155,5 +172,24 @@ export async function updateAdvanceRecord(id: string, input: Partial<NewAdvanceI
 
 export async function deleteAdvanceRecord(id: string) {
   const docRef = doc(db, "households", HOUSEHOLD_ID, "advances", id);
+  await deleteDoc(docRef);
+}
+
+export async function addCardPaymentRecord(input: NewCardPaymentInput) {
+  await addRecord("cardPayments", input);
+}
+
+export async function getCardPaymentRecordsByMonth(month: string) {
+  return getRecordsByMonth<CardPaymentRecord>("cardPayments", month);
+}
+
+export async function getCardPaymentRecordsByBillMonth(month: string) {
+  const collectionRef = collection(db, "households", HOUSEHOLD_ID, "cardPayments");
+  const snapshot = await getDocs(query(collectionRef, where("billMonth", "==", month), orderBy("date", "desc")));
+  return snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() })) as CardPaymentRecord[];
+}
+
+export async function deleteCardPaymentRecord(id: string) {
+  const docRef = doc(db, "households", HOUSEHOLD_ID, "cardPayments", id);
   await deleteDoc(docRef);
 }
