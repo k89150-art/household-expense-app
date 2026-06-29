@@ -1,7 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { deleteExpenseRecord, deleteIncomeRecord, deleteInvestmentRecord, getExpenseRecordsByMonth, getIncomeRecordsByMonth, getInvestmentRecordsByMonth, ExpenseRecord, IncomeRecord, InvestmentRecord } from "@/lib/records";
+import {
+  AdvanceRecord,
+  ExpenseRecord,
+  IncomeRecord,
+  InvestmentRecord,
+  deleteAdvanceRecord,
+  deleteExpenseRecord,
+  deleteIncomeRecord,
+  deleteInvestmentRecord,
+  getAdvanceRecordsByMonth,
+  getExpenseRecordsByMonth,
+  getIncomeRecordsByMonth,
+  getInvestmentRecordsByMonth,
+  updateAdvanceRecord,
+} from "@/lib/records";
 import { Viewer } from "@/lib/household";
 
 type Scope = "month" | "all";
@@ -24,6 +38,10 @@ function money(value = 0) {
 
 function currentMonth() {
   return new Date().toISOString().slice(0, 7);
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function shiftMonth(yyyymm: string, diff: number) {
@@ -62,12 +80,20 @@ function groupByCategory(records: ExpenseRecord[]) {
   }, {});
 }
 
-function groupByCreditCard(records: ExpenseRecord[]) {
-  return records.filter((record) => record.paymentMethod === "credit_card" && record.creditCard).reduce<Record<string, ExpenseRecord[]>>((groups, record) => {
+function groupByCreditCard(records: ExpenseRecord[], advances: AdvanceRecord[]) {
+  const groups: Record<string, { date: string; label: string; amount: number; kind: "expense" | "advance" }[]> = {};
+
+  records.filter((record) => record.paymentMethod === "credit_card" && record.creditCard).forEach((record) => {
     const card = record.creditCard ?? "未指定";
-    groups[card] = [...(groups[card] ?? []), record];
-    return groups;
-  }, {});
+    groups[card] = [...(groups[card] ?? []), { date: record.date, label: record.note || record.category, amount: record.amount, kind: "expense" }];
+  });
+
+  advances.filter((record) => record.paymentMethod === "credit_card" && record.creditCard).forEach((record) => {
+    const card = record.creditCard ?? "未指定";
+    groups[card] = [...(groups[card] ?? []), { date: record.date, label: `代墊・${record.item}`, amount: record.amount, kind: "advance" }];
+  });
+
+  return groups;
 }
 
 function groupByOwner<T extends { owner: "chris" | "wife" }>(records: T[]) {
@@ -88,11 +114,13 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [incomes, setIncomes] = useState<IncomeRecord[]>([]);
   const [investments, setInvestments] = useState<InvestmentRecord[]>([]);
+  const [advances, setAdvances] = useState<AdvanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [openedTarget, setOpenedTarget] = useState<string | null>(null);
   const [openedCategory, setOpenedCategory] = useState<string | null>(null);
   const [showIncomes, setShowIncomes] = useState(false);
   const [showInvestments, setShowInvestments] = useState(false);
+  const [showAdvances, setShowAdvances] = useState(false);
   const [showCreditCards, setShowCreditCards] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -101,14 +129,16 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     setMessage("");
     try {
       const targetMonth = scope === "month" ? selectedMonth : currentMonth();
-      const [expenseData, incomeData, investmentData] = await Promise.all([
+      const [expenseData, incomeData, investmentData, advanceData] = await Promise.all([
         getExpenseRecordsByMonth(targetMonth),
         getIncomeRecordsByMonth(targetMonth),
         getInvestmentRecordsByMonth(targetMonth),
+        getAdvanceRecordsByMonth(targetMonth),
       ]);
       setExpenses(expenseData);
       setIncomes(incomeData);
       setInvestments(investmentData);
+      setAdvances(advanceData);
     } catch (error) {
       console.error(error);
       setMessage("讀取資料失敗。請確認 Firestore Database 已建立，且安全規則已允許登入使用者讀取。");
@@ -143,15 +173,35 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     await loadRecords();
   }
 
+  async function handleDeleteAdvance(id: string) {
+    const ok = window.confirm("確定要刪除這筆代墊款嗎？");
+    if (!ok) return;
+    await deleteAdvanceRecord(id);
+    await loadRecords();
+  }
+
+  async function handleAdvanceStatus(record: AdvanceRecord, status: AdvanceRecord["status"]) {
+    const ok = window.confirm(`確定要把「${record.item}」改成${status}嗎？`);
+    if (!ok) return;
+    await updateAdvanceRecord(record.id, {
+      status,
+      reimbursedDate: status === "已收回" ? today() : undefined,
+    });
+    await loadRecords();
+  }
+
   const totalIncome = incomes.reduce((sum, record) => sum + record.amount, 0);
   const totalExpense = expenses.reduce((sum, record) => sum + record.amount, 0);
   const totalInvestment = investments.reduce((sum, record) => sum + record.amount, 0);
+  const totalAdvance = advances.reduce((sum, record) => sum + record.amount, 0);
+  const pendingAdvance = advances.filter((record) => record.status !== "已收回").reduce((sum, record) => sum + record.amount, 0);
+  const reimbursedAdvance = advances.filter((record) => record.status === "已收回").reduce((sum, record) => sum + record.amount, 0);
   const cashFlowBalance = totalIncome - totalExpense - totalInvestment;
   const expenseBalance = totalIncome - totalExpense;
   const groupedTargets = useMemo(() => groupByTarget(expenses), [expenses]);
   const groupedIncomes = useMemo(() => groupByOwner(incomes), [incomes]);
   const groupedInvestments = useMemo(() => groupByOwner(investments), [investments]);
-  const creditCardGroups = useMemo(() => groupByCreditCard(expenses), [expenses]);
+  const creditCardGroups = useMemo(() => groupByCreditCard(expenses, advances), [expenses, advances]);
   const creditCardTotal = Object.values(creditCardGroups).flat().reduce((sum, record) => sum + record.amount, 0);
 
   return (
@@ -180,16 +230,8 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       </article>
 
       <article className="card grid">
-        <button
-          className="row"
-          type="button"
-          onClick={() => setShowIncomes((value) => !value)}
-          style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}
-        >
-          <div>
-            <h2 style={{ margin: 0 }}>收入紀錄</h2>
-            <div className="muted">點一下看收入明細</div>
-          </div>
+        <button className="row" type="button" onClick={() => setShowIncomes((value) => !value)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
+          <div><h2 style={{ margin: 0 }}>收入紀錄</h2><div className="muted">點一下看收入明細</div></div>
           <strong>{money(totalIncome)}</strong>
         </button>
         {showIncomes ? (
@@ -210,11 +252,36 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
         ) : null}
       </article>
 
+      <article className="card grid">
+        <button className="row" type="button" onClick={() => setShowAdvances((value) => !value)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
+          <div><h2 style={{ margin: 0 }}>代墊款</h2><div className="muted">不列入生活支出，點一下看核銷狀態</div></div>
+          <strong>{money(totalAdvance)}</strong>
+        </button>
+        <div className="row"><span>待收回</span><strong>{money(pendingAdvance)}</strong></div>
+        <div className="row"><span>已收回</span><strong>{money(reimbursedAdvance)}</strong></div>
+        {showAdvances ? (
+          <div className="grid">
+            {advances.length === 0 ? <p className="muted">這個月份沒有代墊款</p> : null}
+            {advances.map((record) => (
+              <div className="card grid" style={{ boxShadow: "none" }} key={record.id}>
+                <div className="row">
+                  <span>{record.date.slice(5)}　{record.item}{record.note ? `・${record.note}` : ""}</span>
+                  <strong>{money(record.amount)}</strong>
+                </div>
+                <div className="muted">{record.status}{record.reimbursedDate ? `・收回日 ${record.reimbursedDate}` : ""}{record.creditCard ? `・${record.creditCard}` : ""}</div>
+                <div className="row">
+                  <button className="btn secondary" type="button" onClick={() => handleAdvanceStatus(record, "已送件")}>已送件</button>
+                  <button className="btn secondary" type="button" onClick={() => handleAdvanceStatus(record, "已收回")}>已收回</button>
+                  <button className="btn secondary" type="button" onClick={() => handleDeleteAdvance(record.id)}>刪除</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </article>
+
       {expenses.length === 0 && !isLoading ? (
-        <article className="card grid">
-          <h2>尚無支出</h2>
-          <p className="muted" style={{ margin: 0 }}>到「新增」頁儲存第一筆支出後，這裡就會出現正式資料。</p>
-        </article>
+        <article className="card grid"><h2>尚無支出</h2><p className="muted" style={{ margin: 0 }}>到「新增」頁儲存第一筆支出後，這裡就會出現正式資料。</p></article>
       ) : null}
 
       {Object.entries(groupedTargets).map(([target, targetRecords]) => {
@@ -225,22 +292,10 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
         const sample = targetRecords[0];
         return (
           <article className="card grid" key={targetKey}>
-            <button
-              className="row"
-              type="button"
-              onClick={() => {
-                setOpenedTarget(isOpen ? null : targetKey);
-                setOpenedCategory(null);
-              }}
-              style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}
-            >
-              <div>
-                <h2 style={{ margin: 0 }}>{sample ? displayTarget(sample, viewer) : target}</h2>
-                <div className="muted">點一下看分類</div>
-              </div>
+            <button className="row" type="button" onClick={() => { setOpenedTarget(isOpen ? null : targetKey); setOpenedCategory(null); }} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
+              <div><h2 style={{ margin: 0 }}>{sample ? displayTarget(sample, viewer) : target}</h2><div className="muted">點一下看分類</div></div>
               <strong>{money(targetTotal)}</strong>
             </button>
-
             {isOpen ? (
               <div className="grid">
                 {Object.entries(groupedCategories).map(([category, categoryRecords]) => {
@@ -249,24 +304,15 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
                   const categoryTotal = categoryRecords.reduce((sum, record) => sum + record.amount, 0);
                   return (
                     <div className="card grid" style={{ boxShadow: "none" }} key={categoryKey}>
-                      <button
-                        className="row"
-                        type="button"
-                        onClick={() => setOpenedCategory(isCategoryOpen ? null : categoryKey)}
-                        style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}
-                      >
-                        <strong>{category}</strong>
-                        <span className="muted">{money(categoryTotal)}・{isCategoryOpen ? "收合" : "明細"}</span>
+                      <button className="row" type="button" onClick={() => setOpenedCategory(isCategoryOpen ? null : categoryKey)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
+                        <strong>{category}</strong><span className="muted">{money(categoryTotal)}・{isCategoryOpen ? "收合" : "明細"}</span>
                       </button>
                       {isCategoryOpen ? (
                         <div className="grid">
                           {categoryRecords.map((record) => (
                             <div className="row" key={record.id}>
                               <span>{record.date.slice(5)}　{record.isPrivate ? "個人雜支" : record.note || record.category}</span>
-                              <span className="muted">
-                                {money(record.amount)}{record.creditCard ? `・${record.creditCard}` : ""}{record.target === "junyao" ? `・${displayPaidBy(record, viewer)}付` : ""}
-                                <button className="btn secondary" type="button" onClick={() => handleDeleteExpense(record.id)} style={{ marginLeft: 8 }}>刪除</button>
-                              </span>
+                              <span className="muted">{money(record.amount)}{record.creditCard ? `・${record.creditCard}` : ""}{record.target === "junyao" ? `・${displayPaidBy(record, viewer)}付` : ""}<button className="btn secondary" type="button" onClick={() => handleDeleteExpense(record.id)} style={{ marginLeft: 8 }}>刪除</button></span>
                             </div>
                           ))}
                         </div>
@@ -281,16 +327,8 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       })}
 
       <article className="card grid">
-        <button
-          className="row"
-          type="button"
-          onClick={() => setShowInvestments((value) => !value)}
-          style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}
-        >
-          <div>
-            <h2 style={{ margin: 0 }}>投資紀錄</h2>
-            <div className="muted">不列入生活支出，點一下看明細</div>
-          </div>
+        <button className="row" type="button" onClick={() => setShowInvestments((value) => !value)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
+          <div><h2 style={{ margin: 0 }}>投資紀錄</h2><div className="muted">不列入生活支出，點一下看明細</div></div>
           <strong>{money(totalInvestment)}</strong>
         </button>
         {showInvestments ? (
@@ -312,16 +350,8 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       </article>
 
       <article className="card grid">
-        <button
-          className="row"
-          type="button"
-          onClick={() => setShowCreditCards((value) => !value)}
-          style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}
-        >
-          <div>
-            <h2 style={{ margin: 0 }}>信用卡核對</h2>
-            <div className="muted">點一下看各卡消費</div>
-          </div>
+        <button className="row" type="button" onClick={() => setShowCreditCards((value) => !value)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
+          <div><h2 style={{ margin: 0 }}>信用卡核對</h2><div className="muted">包含一般支出與代墊刷卡</div></div>
           <strong>{money(creditCardTotal)}</strong>
         </button>
         {showCreditCards ? (
@@ -331,10 +361,10 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
               return (
                 <div className="card grid" style={{ boxShadow: "none" }} key={card}>
                   <div className="row"><strong>{card}</strong><strong>{money(cardTotal)}</strong></div>
-                  {cardRecords.map((record) => (
-                    <div className="row" key={`${card}-${record.id}`}>
-                      <span>{record.date.slice(5)}　{record.note || record.category}</span>
-                      <span className="muted">{money(record.amount)}</span>
+                  {cardRecords.map((record, index) => (
+                    <div className="row" key={`${card}-${record.date}-${index}`}>
+                      <span>{record.date.slice(5)}　{record.label}</span>
+                      <span className="muted">{money(record.amount)}{record.kind === "advance" ? "・代墊" : ""}</span>
                     </div>
                   ))}
                 </div>
