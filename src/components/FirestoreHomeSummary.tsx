@@ -3,13 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
 import {
-  AdvanceRecord,
-  CardPaymentRecord,
-  CreditCardName,
-  ExpenseRecord,
-  IncomeRecord,
-  InstallmentScheduleItem,
-  InvestmentRecord,
   addCardPaymentRecord,
   deleteAdvanceRecord,
   deleteCardPaymentRecord,
@@ -26,32 +19,38 @@ import {
   updateAdvanceRecord,
   updateExpenseRecord,
 } from "@/lib/records";
-import { Viewer } from "@/lib/household";
+import type {
+  AdvanceRecord,
+  CardPaymentRecord,
+  CreditCardName,
+  ExpenseRecord,
+  IncomeRecord,
+  InstallmentInfo,
+  InstallmentScheduleItem,
+  InvestmentRecord,
+} from "@/lib/records";
+import type { Viewer } from "@/lib/household";
 
 type Scope = "month" | "all";
+type Props = { viewer: Viewer; refreshKey?: number };
+type CardLine = { date: string; label: string; amount: number; kind: "expense" | "advance" | "installment"; sourceExpense?: ExpenseRecord };
 
-type Props = {
-  viewer: Viewer;
-  refreshKey?: number;
-};
-
-const TARGET_LABELS: Record<string, string> = {
-  chris: "我",
-  wife: "我",
-  junyao: "竣堯",
-  cat: "貓",
-};
+const TARGET_LABELS: Record<string, string> = { chris: "我", wife: "我", junyao: "竣堯", cat: "貓" };
 
 function money(value = 0) {
   return `$${value.toLocaleString("zh-TW")}`;
 }
 
-function currentMonth() {
-  return new Date().toISOString().slice(0, 7);
+function localDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
+function currentMonth() {
+  return localDate().slice(0, 7);
 }
 
 function shiftMonth(yyyymm: string, diff: number) {
@@ -74,11 +73,7 @@ function splitInstallmentAmount(totalPayable: number, totalInstallments: number,
   return Array.from({ length: totalInstallments }, (_, index) => {
     const installmentNo = index + 1;
     const amount = installmentNo === totalInstallments ? totalPayable - baseAmount * (totalInstallments - 1) : baseAmount;
-    return {
-      billMonth: shiftMonth(firstBillMonth, index),
-      installmentNo,
-      amount,
-    };
+    return { billMonth: shiftMonth(firstBillMonth, index), installmentNo, amount };
   });
 }
 
@@ -107,63 +102,6 @@ function groupByCategory(records: ExpenseRecord[]) {
   }, {});
 }
 
-type CardLine = {
-  date: string;
-  label: string;
-  amount: number;
-  kind: "expense" | "advance" | "installment";
-  sourceExpense?: ExpenseRecord;
-};
-
-function addCardLine(groups: Record<string, CardLine[]>, card: string, line: CardLine) {
-  groups[card] = [...(groups[card] ?? []), line];
-}
-
-function groupByCreditCard(records: ExpenseRecord[], advances: AdvanceRecord[]) {
-  const groups: Record<string, CardLine[]> = {};
-
-  records.filter((record) => record.paymentMethod === "credit_card" && record.creditCard).forEach((record) => {
-    const card = record.creditCard ?? "未指定";
-    addCardLine(groups, card, { date: record.date, label: record.note || record.category, amount: record.amount, kind: "expense", sourceExpense: record });
-  });
-
-  advances.filter((record) => record.paymentMethod === "credit_card" && record.creditCard).forEach((record) => {
-    const card = record.creditCard ?? "未指定";
-    addCardLine(groups, card, { date: record.date, label: `代墊・${record.item}`, amount: record.amount, kind: "advance" });
-  });
-
-  return groups;
-}
-
-function groupDueCreditCardBills(normalBillRecords: ExpenseRecord[], billAdvances: AdvanceRecord[], allCardRecords: ExpenseRecord[], billMonth: string) {
-  const groups: Record<string, CardLine[]> = {};
-
-  normalBillRecords.filter((record) => record.paymentMethod === "credit_card" && record.creditCard && !record.installment?.enabled).forEach((record) => {
-    const card = record.creditCard ?? "未指定";
-    addCardLine(groups, card, { date: record.date, label: record.note || record.category, amount: record.amount, kind: "expense", sourceExpense: record });
-  });
-
-  billAdvances.filter((record) => record.paymentMethod === "credit_card" && record.creditCard).forEach((record) => {
-    const card = record.creditCard ?? "未指定";
-    addCardLine(groups, card, { date: record.date, label: `代墊・${record.item}`, amount: record.amount, kind: "advance" });
-  });
-
-  allCardRecords.filter((record) => record.creditCard && record.installment?.enabled).forEach((record) => {
-    const matched = record.installment?.schedule.find((item) => item.billMonth === billMonth);
-    if (!matched) return;
-    const card = record.creditCard ?? "未指定";
-    addCardLine(groups, card, {
-      date: `${matched.billMonth}-01`,
-      label: `${record.category}・分期 ${matched.installmentNo}/${record.installment.total}${record.note ? `・${record.note}` : ""}`,
-      amount: matched.amount,
-      kind: "installment",
-      sourceExpense: record,
-    });
-  });
-
-  return groups;
-}
-
 function groupByOwner<T extends { owner: "chris" | "wife" }>(records: T[]) {
   return records.reduce<Record<string, T[]>>((groups, record) => {
     groups[record.owner] = [...(groups[record.owner] ?? []), record];
@@ -176,12 +114,53 @@ function ownerLabel(owner: "chris" | "wife", viewer: Viewer) {
   return viewer === "wife" ? "我" : "太太";
 }
 
+function addCardLine(groups: Record<string, CardLine[]>, card: string, line: CardLine) {
+  groups[card] = [...(groups[card] ?? []), line];
+}
+
+function groupByCreditCard(records: ExpenseRecord[], advances: AdvanceRecord[]) {
+  const groups: Record<string, CardLine[]> = {};
+  records.filter((record) => record.paymentMethod === "credit_card" && record.creditCard).forEach((record) => {
+    addCardLine(groups, record.creditCard ?? "未指定", { date: record.date, label: record.note || record.category, amount: record.amount, kind: "expense", sourceExpense: record });
+  });
+  advances.filter((record) => record.paymentMethod === "credit_card" && record.creditCard).forEach((record) => {
+    addCardLine(groups, record.creditCard ?? "未指定", { date: record.date, label: `代墊・${record.item}`, amount: record.amount, kind: "advance" });
+  });
+  return groups;
+}
+
+function groupDueCreditCardBills(normalBillRecords: ExpenseRecord[], billAdvances: AdvanceRecord[], allCardRecords: ExpenseRecord[], billMonth: string) {
+  const groups: Record<string, CardLine[]> = {};
+
+  normalBillRecords.forEach((record) => {
+    if (record.paymentMethod !== "credit_card" || !record.creditCard || record.installment?.enabled) return;
+    addCardLine(groups, record.creditCard, { date: record.date, label: record.note || record.category, amount: record.amount, kind: "expense", sourceExpense: record });
+  });
+
+  billAdvances.forEach((record) => {
+    if (record.paymentMethod !== "credit_card" || !record.creditCard) return;
+    addCardLine(groups, record.creditCard, { date: record.date, label: `代墊・${record.item}`, amount: record.amount, kind: "advance" });
+  });
+
+  allCardRecords.forEach((record) => {
+    const installment: InstallmentInfo | undefined = record.installment;
+    if (!record.creditCard || !installment?.enabled) return;
+    const matched = installment.schedule.find((item) => item.billMonth === billMonth);
+    if (!matched) return;
+    addCardLine(groups, record.creditCard, {
+      date: `${matched.billMonth}-01`,
+      label: `${record.category}・分期 ${matched.installmentNo}/${installment.total}${record.note ? `・${record.note}` : ""}`,
+      amount: matched.amount,
+      kind: "installment",
+      sourceExpense: record,
+    });
+  });
+
+  return groups;
+}
+
 function statusBadge(isPaid: boolean) {
-  return (
-    <span style={{ color: isPaid ? "#16803C" : "#C53030", fontWeight: 700 }}>
-      {isPaid ? "已繳款" : "未繳款"}
-    </span>
-  );
+  return <span style={{ color: isPaid ? "#16803C" : "#C53030", fontWeight: 700 }}>{isPaid ? "已繳款" : "未繳款"}</span>;
 }
 
 export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
@@ -246,59 +225,50 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   }, [selectedMonth, scope, refreshKey]);
 
   async function handleDeleteExpense(id: string) {
-    const ok = window.confirm("確定要刪除這筆支出嗎？");
-    if (!ok) return;
+    if (!window.confirm("確定要刪除這筆支出嗎？")) return;
     await deleteExpenseRecord(id);
     await loadRecords();
   }
 
   async function handleDeleteIncome(id: string) {
-    const ok = window.confirm("確定要刪除這筆收入嗎？");
-    if (!ok) return;
+    if (!window.confirm("確定要刪除這筆收入嗎？")) return;
     await deleteIncomeRecord(id);
     await loadRecords();
   }
 
   async function handleDeleteInvestment(id: string) {
-    const ok = window.confirm("確定要刪除這筆投資紀錄嗎？");
-    if (!ok) return;
+    if (!window.confirm("確定要刪除這筆投資紀錄嗎？")) return;
     await deleteInvestmentRecord(id);
     await loadRecords();
   }
 
   async function handleDeleteAdvance(id: string) {
-    const ok = window.confirm("確定要刪除這筆代墊款嗎？");
-    if (!ok) return;
+    if (!window.confirm("確定要刪除這筆代墊款嗎？")) return;
     await deleteAdvanceRecord(id);
     await loadRecords();
   }
 
   async function handleAdvanceStatus(record: AdvanceRecord, status: AdvanceRecord["status"]) {
-    const ok = window.confirm(`確定要把「${record.item}」改成${status}嗎？`);
-    if (!ok) return;
-    await updateAdvanceRecord(record.id, {
-      status,
-      reimbursedDate: status === "已收回" ? today() : undefined,
-    });
+    if (!window.confirm(`確定要把「${record.item}」改成${status}嗎？`)) return;
+    await updateAdvanceRecord(record.id, { status, reimbursedDate: status === "已收回" ? localDate() : undefined });
     await loadRecords();
   }
 
   async function handleUpdateInstallmentFirstBillMonth(record: ExpenseRecord) {
-    if (!record.installment?.enabled) return;
-    const nextMonth = window.prompt("請輸入第一期帳單月份，例如 2026-09", record.installment.firstBillMonth);
+    const installment = record.installment;
+    if (!installment?.enabled) return;
+    const nextMonth = window.prompt("請輸入第一期帳單月份，例如 2026-09", installment.firstBillMonth);
     if (!nextMonth) return;
     if (!isValidMonth(nextMonth)) {
       setMessage("月份格式錯誤，請輸入例如 2026-09。");
       return;
     }
-    const ok = window.confirm(`確定將這筆分期的第一期帳單月份改成 ${nextMonth} 嗎？`);
-    if (!ok) return;
-    const nextSchedule = splitInstallmentAmount(record.installment.totalPayable, record.installment.total, nextMonth);
+    if (!window.confirm(`確定將這筆分期的第一期帳單月份改成 ${nextMonth} 嗎？`)) return;
     await updateExpenseRecord(record.id, {
       installment: {
-        ...record.installment,
+        ...installment,
         firstBillMonth: nextMonth,
-        schedule: nextSchedule,
+        schedule: splitInstallmentAmount(installment.totalPayable, installment.total, nextMonth),
       },
     });
     await loadRecords();
@@ -309,25 +279,13 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       setMessage("請先登入。");
       return;
     }
-    const ok = window.confirm(`確定要建立 ${card} ${billMonth} 帳單繳款 ${money(amount)} 嗎？`);
-    if (!ok) return;
-    await addCardPaymentRecord({
-      date: today(),
-      amount,
-      owner: viewer,
-      card: card as CreditCardName,
-      billMonth,
-      status: "已繳款",
-      paidDate: today(),
-      note: `${billMonth} ${card}帳單繳款`,
-      createdBy: user.uid,
-    });
+    if (!window.confirm(`確定要建立 ${card} ${billMonth} 帳單繳款 ${money(amount)} 嗎？`)) return;
+    await addCardPaymentRecord({ date: localDate(), amount, owner: viewer, card: card as CreditCardName, billMonth, status: "已繳款", paidDate: localDate(), note: `${billMonth} ${card}帳單繳款`, createdBy: user.uid });
     await loadRecords();
   }
 
   async function handleDeleteCardPayment(id: string) {
-    const ok = window.confirm("確定要取消這筆信用卡繳款紀錄嗎？");
-    if (!ok) return;
+    if (!window.confirm("確定要取消這筆信用卡繳款紀錄嗎？")) return;
     await deleteCardPaymentRecord(id);
     await loadRecords();
   }
@@ -382,68 +340,42 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           <div><h2 style={{ margin: 0 }}>收入紀錄</h2><div className="muted">點一下看收入明細</div></div>
           <strong>{money(totalIncome)}</strong>
         </button>
-        {showIncomes ? (
-          <div className="grid">
-            {incomes.length === 0 ? <p className="muted">這個月份沒有收入資料</p> : null}
-            {Object.entries(groupedIncomes).map(([owner, ownerRecords]) => (
-              <div className="card grid" style={{ boxShadow: "none" }} key={owner}>
-                <div className="row"><strong>{ownerLabel(owner as "chris" | "wife", viewer)}</strong><strong>{money(ownerRecords.reduce((sum, record) => sum + record.amount, 0))}</strong></div>
-                {ownerRecords.map((record) => (
-                  <div className="row" key={record.id}>
-                    <span>{record.date.slice(5)}　{record.category}{record.note ? `・${record.note}` : ""}</span>
-                    <span className="muted">{money(record.amount)} <button className="btn secondary" type="button" onClick={() => handleDeleteIncome(record.id)} style={{ marginLeft: 8 }}>刪除</button></span>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        ) : null}
+        {showIncomes ? <div className="grid">
+          {incomes.length === 0 ? <p className="muted">這個月份沒有收入資料</p> : null}
+          {Object.entries(groupedIncomes).map(([owner, ownerRecords]) => <div className="card grid" style={{ boxShadow: "none" }} key={owner}>
+            <div className="row"><strong>{ownerLabel(owner as "chris" | "wife", viewer)}</strong><strong>{money(ownerRecords.reduce((sum, record) => sum + record.amount, 0))}</strong></div>
+            {ownerRecords.map((record) => <div className="row" key={record.id}><span>{record.date.slice(5)}　{record.category}{record.note ? `・${record.note}` : ""}</span><span className="muted">{money(record.amount)} <button className="btn secondary" type="button" onClick={() => handleDeleteIncome(record.id)} style={{ marginLeft: 8 }}>刪除</button></span></div>)}
+          </div>)}
+        </div> : null}
       </article>
 
-      {expenses.length === 0 && !isLoading ? (
-        <article className="card grid"><h2>尚無支出</h2><p className="muted" style={{ margin: 0 }}>到「新增」頁儲存第一筆支出後，這裡就會出現正式資料。</p></article>
-      ) : null}
+      {expenses.length === 0 && !isLoading ? <article className="card grid"><h2>尚無支出</h2><p className="muted" style={{ margin: 0 }}>到「新增」頁儲存第一筆支出後，這裡就會出現正式資料。</p></article> : null}
 
       {Object.entries(groupedTargets).map(([target, targetRecords]) => {
-        const targetKey = target;
-        const isOpen = openedTarget === targetKey;
+        const isOpen = openedTarget === target;
         const targetTotal = targetRecords.reduce((sum, record) => sum + record.amount, 0);
         const groupedCategories = groupByCategory(targetRecords);
         const sample = targetRecords[0];
-        return (
-          <article className="card grid" key={targetKey}>
-            <button className="row" type="button" onClick={() => { setOpenedTarget(isOpen ? null : targetKey); setOpenedCategory(null); }} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
-              <div><h2 style={{ margin: 0 }}>{sample ? displayTarget(sample, viewer) : target}</h2><div className="muted">點一下看分類</div></div>
-              <strong>{money(targetTotal)}</strong>
-            </button>
-            {isOpen ? (
-              <div className="grid">
-                {Object.entries(groupedCategories).map(([category, categoryRecords]) => {
-                  const categoryKey = `${targetKey}-${category}`;
-                  const isCategoryOpen = openedCategory === categoryKey;
-                  const categoryTotal = categoryRecords.reduce((sum, record) => sum + record.amount, 0);
-                  return (
-                    <div className="card grid" style={{ boxShadow: "none" }} key={categoryKey}>
-                      <button className="row" type="button" onClick={() => setOpenedCategory(isCategoryOpen ? null : categoryKey)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
-                        <strong>{category}</strong><span className="muted">{money(categoryTotal)}・{isCategoryOpen ? "收合" : "明細"}</span>
-                      </button>
-                      {isCategoryOpen ? (
-                        <div className="grid">
-                          {categoryRecords.map((record) => (
-                            <div className="row" key={record.id}>
-                              <span>{record.date.slice(5)}　{record.isPrivate ? "個人雜支" : record.note || record.category}</span>
-                              <span className="muted">{money(record.amount)}{record.creditCard ? `・${record.creditCard}` : ""}{record.target === "junyao" ? `・${displayPaidBy(record, viewer)}付` : ""}<button className="btn secondary" type="button" onClick={() => handleDeleteExpense(record.id)} style={{ marginLeft: 8 }}>刪除</button></span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
-          </article>
-        );
+        return <article className="card grid" key={target}>
+          <button className="row" type="button" onClick={() => { setOpenedTarget(isOpen ? null : target); setOpenedCategory(null); }} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
+            <div><h2 style={{ margin: 0 }}>{sample ? displayTarget(sample, viewer) : target}</h2><div className="muted">點一下看分類</div></div>
+            <strong>{money(targetTotal)}</strong>
+          </button>
+          {isOpen ? <div className="grid">{Object.entries(groupedCategories).map(([category, categoryRecords]) => {
+            const categoryKey = `${target}-${category}`;
+            const isCategoryOpen = openedCategory === categoryKey;
+            const categoryTotal = categoryRecords.reduce((sum, record) => sum + record.amount, 0);
+            return <div className="card grid" style={{ boxShadow: "none" }} key={categoryKey}>
+              <button className="row" type="button" onClick={() => setOpenedCategory(isCategoryOpen ? null : categoryKey)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
+                <strong>{category}</strong><span className="muted">{money(categoryTotal)}・{isCategoryOpen ? "收合" : "明細"}</span>
+              </button>
+              {isCategoryOpen ? <div className="grid">{categoryRecords.map((record) => <div className="row" key={record.id}>
+                <span>{record.date.slice(5)}　{record.isPrivate ? "個人雜支" : record.note || record.category}</span>
+                <span className="muted">{money(record.amount)}{record.creditCard ? `・${record.creditCard}` : ""}{record.target === "junyao" ? `・${displayPaidBy(record, viewer)}付` : ""}<button className="btn secondary" type="button" onClick={() => handleDeleteExpense(record.id)} style={{ marginLeft: 8 }}>刪除</button></span>
+              </div>)}</div> : null}
+            </div>;
+          })}</div> : null}
+        </article>;
       })}
 
       <article className="card grid">
@@ -451,22 +383,13 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           <div><h2 style={{ margin: 0 }}>投資紀錄</h2><div className="muted">不列入生活支出，點一下看明細</div></div>
           <strong>{money(totalInvestment)}</strong>
         </button>
-        {showInvestments ? (
-          <div className="grid">
-            {investments.length === 0 ? <p className="muted">這個月份沒有投資紀錄</p> : null}
-            {Object.entries(groupedInvestments).map(([owner, ownerRecords]) => (
-              <div className="card grid" style={{ boxShadow: "none" }} key={owner}>
-                <div className="row"><strong>{ownerLabel(owner as "chris" | "wife", viewer)}</strong><strong>{money(ownerRecords.reduce((sum, record) => sum + record.amount, 0))}</strong></div>
-                {ownerRecords.map((record) => (
-                  <div className="row" key={record.id}>
-                    <span>{record.date.slice(5)}　{record.type}・{record.name}{record.note ? `・${record.note}` : ""}</span>
-                    <span className="muted">{money(record.amount)} <button className="btn secondary" type="button" onClick={() => handleDeleteInvestment(record.id)} style={{ marginLeft: 8 }}>刪除</button></span>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        ) : null}
+        {showInvestments ? <div className="grid">
+          {investments.length === 0 ? <p className="muted">這個月份沒有投資紀錄</p> : null}
+          {Object.entries(groupedInvestments).map(([owner, ownerRecords]) => <div className="card grid" style={{ boxShadow: "none" }} key={owner}>
+            <div className="row"><strong>{ownerLabel(owner as "chris" | "wife", viewer)}</strong><strong>{money(ownerRecords.reduce((sum, record) => sum + record.amount, 0))}</strong></div>
+            {ownerRecords.map((record) => <div className="row" key={record.id}><span>{record.date.slice(5)}　{record.type}・{record.name}{record.note ? `・${record.note}` : ""}</span><span className="muted">{money(record.amount)} <button className="btn secondary" type="button" onClick={() => handleDeleteInvestment(record.id)} style={{ marginLeft: 8 }}>刪除</button></span></div>)}
+          </div>)}
+        </div> : null}
       </article>
 
       <article className="card grid">
@@ -474,93 +397,68 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           <div><h2 style={{ margin: 0 }}>信用卡</h2><div className="muted">本月應繳帳單與本月刷卡核對分開顯示</div></div>
           <strong>{money(dueCreditCardTotal)}</strong>
         </button>
-        {showCreditCards ? (
-          <div className="grid">
-            <div className="card grid" style={{ boxShadow: "none" }}>
-              <strong>本月應繳帳單（{monthLabel(dueBillMonth)}帳單）</strong>
-              {Object.keys(dueCreditCardGroups).length === 0 ? <p className="muted">沒有上個月信用卡帳單資料</p> : null}
-              {Object.entries(dueCreditCardGroups).map(([card, cardRecords]) => {
-                const cardTotal = cardRecords.reduce((sum, record) => sum + record.amount, 0);
-                const payment = dueBillPayments.find((item) => item.card === card);
-                const isPaid = Boolean(payment);
-                return (
-                  <div className="card grid" style={{ boxShadow: "none" }} key={`due-${card}`}>
-                    <div className="row"><strong>{card}</strong><strong>{money(cardTotal)}</strong></div>
-                    <div className="row"><span>狀態</span>{statusBadge(isPaid)}</div>
-                    {payment ? <div className="muted">繳款日：{payment.paidDate}・{money(payment.amount)}</div> : null}
-                    {!isPaid ? <button className="btn" type="button" onClick={() => handleCreateCardPayment(card, cardTotal, dueBillMonth)}>建立繳款紀錄</button> : null}
-                    {payment ? <button className="btn secondary" type="button" onClick={() => handleDeleteCardPayment(payment.id)}>取消繳款紀錄</button> : null}
-                    {cardRecords.map((record, index) => (
-                      <div className="row" key={`${card}-${record.date}-${index}`}>
-                        <span>{record.date.slice(5)}　{record.label}</span>
-                        <span className="muted">{money(record.amount)}{record.kind === "advance" ? "・代墊" : ""}{record.kind === "installment" ? "・分期" : ""}</span>
-                        {record.sourceExpense?.installment?.enabled ? <button className="btn secondary" type="button" onClick={() => handleUpdateInstallmentFirstBillMonth(record.sourceExpense!)}>修改分期月份</button> : null}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="card grid" style={{ boxShadow: "none" }}>
-              <strong>本月刷卡核對（{monthLabel(selectedMonth)}消費）</strong>
-              <div className="muted">這裡是本月刷卡明細；分期消費可在這裡修改第一期帳單月份。</div>
-              {Object.keys(creditCardGroups).length === 0 ? <p className="muted">這個月份沒有信用卡消費</p> : null}
-              {Object.entries(creditCardGroups).map(([card, cardRecords]) => {
-                const cardTotal = cardRecords.reduce((sum, record) => sum + record.amount, 0);
-                return (
-                  <div className="card grid" style={{ boxShadow: "none" }} key={`current-${card}`}>
-                    <div className="row"><strong>{card}</strong><strong>{money(cardTotal)}</strong></div>
-                    {cardRecords.map((record, index) => (
-                      <div className="row" key={`${card}-${record.date}-${index}`}>
-                        <span>{record.date.slice(5)}　{record.label}</span>
-                        <span className="muted">{money(record.amount)}{record.kind === "advance" ? "・代墊" : ""}{record.sourceExpense?.installment?.enabled ? "・分期" : ""}</span>
-                        {record.sourceExpense?.installment?.enabled ? <button className="btn secondary" type="button" onClick={() => handleUpdateInstallmentFirstBillMonth(record.sourceExpense!)}>修改分期月份</button> : null}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-
-            {cardPayments.length > 0 ? (
-              <div className="card grid" style={{ boxShadow: "none" }}>
-                <strong>本月已繳信用卡</strong>
-                {cardPayments.map((payment) => (
-                  <div className="row" key={payment.id}>
-                    <span>{payment.date.slice(5)}　{payment.card}・{payment.billMonth}帳單</span>
-                    <span className="muted">{money(payment.amount)}</span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
+        {showCreditCards ? <div className="grid">
+          <div className="card grid" style={{ boxShadow: "none" }}>
+            <strong>本月應繳帳單（{monthLabel(dueBillMonth)}帳單）</strong>
+            {Object.keys(dueCreditCardGroups).length === 0 ? <p className="muted">沒有上個月信用卡帳單資料</p> : null}
+            {Object.entries(dueCreditCardGroups).map(([card, cardRecords]) => {
+              const cardTotal = cardRecords.reduce((sum, record) => sum + record.amount, 0);
+              const payment = dueBillPayments.find((item) => item.card === card);
+              const isPaid = Boolean(payment);
+              return <div className="card grid" style={{ boxShadow: "none" }} key={`due-${card}`}>
+                <div className="row"><strong>{card}</strong><strong>{money(cardTotal)}</strong></div>
+                <div className="row"><span>狀態</span>{statusBadge(isPaid)}</div>
+                {payment ? <div className="muted">繳款日：{payment.paidDate}・{money(payment.amount)}</div> : null}
+                {!isPaid ? <button className="btn" type="button" onClick={() => handleCreateCardPayment(card, cardTotal, dueBillMonth)}>建立繳款紀錄</button> : null}
+                {payment ? <button className="btn secondary" type="button" onClick={() => handleDeleteCardPayment(payment.id)}>取消繳款紀錄</button> : null}
+                {cardRecords.map((record, index) => <div className="row" key={`${card}-${record.date}-${index}`}>
+                  <span>{record.date.slice(5)}　{record.label}</span>
+                  <span className="muted">{money(record.amount)}{record.kind === "advance" ? "・代墊" : ""}{record.kind === "installment" ? "・分期" : ""}</span>
+                  {record.sourceExpense?.installment?.enabled ? <button className="btn secondary" type="button" onClick={() => record.sourceExpense ? handleUpdateInstallmentFirstBillMonth(record.sourceExpense) : undefined}>修改分期月份</button> : null}
+                </div>)}
+              </div>;
+            })}
           </div>
-        ) : null}
+
+          <div className="card grid" style={{ boxShadow: "none" }}>
+            <strong>本月刷卡核對（{monthLabel(selectedMonth)}消費）</strong>
+            <div className="muted">這裡是本月刷卡明細；分期消費可在這裡修改第一期帳單月份。</div>
+            {Object.keys(creditCardGroups).length === 0 ? <p className="muted">這個月份沒有信用卡消費</p> : null}
+            {Object.entries(creditCardGroups).map(([card, cardRecords]) => {
+              const cardTotal = cardRecords.reduce((sum, record) => sum + record.amount, 0);
+              return <div className="card grid" style={{ boxShadow: "none" }} key={`current-${card}`}>
+                <div className="row"><strong>{card}</strong><strong>{money(cardTotal)}</strong></div>
+                {cardRecords.map((record, index) => <div className="row" key={`${card}-${record.date}-${index}`}>
+                  <span>{record.date.slice(5)}　{record.label}</span>
+                  <span className="muted">{money(record.amount)}{record.kind === "advance" ? "・代墊" : ""}{record.sourceExpense?.installment?.enabled ? "・分期" : ""}</span>
+                  {record.sourceExpense?.installment?.enabled ? <button className="btn secondary" type="button" onClick={() => record.sourceExpense ? handleUpdateInstallmentFirstBillMonth(record.sourceExpense) : undefined}>修改分期月份</button> : null}
+                </div>)}
+              </div>;
+            })}
+          </div>
+
+          {cardPayments.length > 0 ? <div className="card grid" style={{ boxShadow: "none" }}>
+            <strong>本月已繳信用卡</strong>
+            {cardPayments.map((payment) => <div className="row" key={payment.id}><span>{payment.date.slice(5)}　{payment.card}・{payment.billMonth}帳單</span><span className="muted">{money(payment.amount)}</span></div>)}
+          </div> : null}
+        </div> : null}
       </article>
 
-      {pendingAdvance > 0 ? (
-        <article className="card grid">
-          <button className="row" type="button" onClick={() => setShowAdvances((value) => !value)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
-            <div><h2 style={{ margin: 0 }}>代墊款</h2><div className="muted">尚未銷帳時才顯示，點一下看明細</div></div>
-            <strong>{money(pendingAdvance)}</strong>
-          </button>
-          {showAdvances ? (
-            <div className="grid">
-              {pendingAdvanceRecords.map((record) => (
-                <div className="card grid" style={{ boxShadow: "none" }} key={record.id}>
-                  <div className="row"><span>{record.date.slice(5)}　{record.item}{record.note ? `・${record.note}` : ""}</span><strong>{money(record.amount)}</strong></div>
-                  <div className="muted">{record.status}{record.creditCard ? `・${record.creditCard}` : ""}</div>
-                  <div className="row">
-                    <button className="btn secondary" type="button" onClick={() => handleAdvanceStatus(record, "已送件")}>已送件</button>
-                    <button className="btn secondary" type="button" onClick={() => handleAdvanceStatus(record, "已收回")}>已收回</button>
-                    <button className="btn secondary" type="button" onClick={() => handleDeleteAdvance(record.id)}>刪除</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </article>
-      ) : null}
+      {pendingAdvance > 0 ? <article className="card grid">
+        <button className="row" type="button" onClick={() => setShowAdvances((value) => !value)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
+          <div><h2 style={{ margin: 0 }}>代墊款</h2><div className="muted">尚未銷帳時才顯示，點一下看明細</div></div>
+          <strong>{money(pendingAdvance)}</strong>
+        </button>
+        {showAdvances ? <div className="grid">{pendingAdvanceRecords.map((record) => <div className="card grid" style={{ boxShadow: "none" }} key={record.id}>
+          <div className="row"><span>{record.date.slice(5)}　{record.item}{record.note ? `・${record.note}` : ""}</span><strong>{money(record.amount)}</strong></div>
+          <div className="muted">{record.status}{record.creditCard ? `・${record.creditCard}` : ""}</div>
+          <div className="row">
+            <button className="btn secondary" type="button" onClick={() => handleAdvanceStatus(record, "已送件")}>已送件</button>
+            <button className="btn secondary" type="button" onClick={() => handleAdvanceStatus(record, "已收回")}>已收回</button>
+            <button className="btn secondary" type="button" onClick={() => handleDeleteAdvance(record.id)}>刪除</button>
+          </div>
+        </div>)}</div> : null}
+      </article> : null}
     </section>
   );
 }
