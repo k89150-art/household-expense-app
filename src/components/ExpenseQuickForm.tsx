@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
-import { EXPENSE_CATEGORIES, PAYMENT_METHOD_LABELS } from "@/lib/categories";
+import { EXPENSE_CATEGORIES, HOME_FEE_ITEMS, PAYMENT_METHOD_LABELS, TAX_ITEMS } from "@/lib/categories";
 import { addExpenseRecord } from "@/lib/records";
 import { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
 
@@ -38,6 +38,8 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(today());
   const [category, setCategory] = useState<ExpenseCategory>("餐飲");
+  const [homeFeeItem, setHomeFeeItem] = useState<(typeof HOME_FEE_ITEMS)[number]>("水費");
+  const [taxItem, setTaxItem] = useState<(typeof TAX_ITEMS)[number]>("牌照稅");
   const [target, setTarget] = useState<PersonTarget>(selfTarget);
   const [childPaidBy, setChildPaidBy] = useState<"self" | "spouse">("self");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
@@ -59,6 +61,12 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
     { value: "cat", label: "貓" },
   ];
 
+  function getSubItem() {
+    if (category === "居家固定費") return homeFeeItem;
+    if (category === "稅金") return taxItem;
+    return "";
+  }
+
   async function handleSave() {
     const parsedAmount = Number(amount);
     if (!user) {
@@ -73,6 +81,8 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
     const paidBy = target === "junyao" && childPaidBy === "spouse"
       ? (viewer === "chris" ? "wife" : "chris")
       : viewer;
+    const subItem = getSubItem();
+    const finalNote = [subItem, note.trim()].filter(Boolean).join("・") || undefined;
 
     setIsSaving(true);
     setMessage("");
@@ -85,7 +95,7 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
         paidBy,
         paymentMethod,
         creditCard: paymentMethod === "credit_card" ? creditCard : undefined,
-        note: note.trim() || undefined,
+        note: finalNote,
         isPrivate,
         privateNote: isPrivate ? privateNote.trim() || undefined : undefined,
         createdBy: user.uid,
@@ -121,6 +131,22 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
           {EXPENSE_CATEGORIES.map((item) => <option key={item}>{item}</option>)}
         </select>
       </label>
+      {category === "居家固定費" ? (
+        <label className="field">
+          <span>居家固定費細項</span>
+          <select className="select" value={homeFeeItem} onChange={(event) => setHomeFeeItem(event.target.value as (typeof HOME_FEE_ITEMS)[number])}>
+            {HOME_FEE_ITEMS.map((item) => <option key={item}>{item}</option>)}
+          </select>
+        </label>
+      ) : null}
+      {category === "稅金" ? (
+        <label className="field">
+          <span>稅金細項</span>
+          <select className="select" value={taxItem} onChange={(event) => setTaxItem(event.target.value as (typeof TAX_ITEMS)[number])}>
+            {TAX_ITEMS.map((item) => <option key={item}>{item}</option>)}
+          </select>
+        </label>
+      ) : null}
       <label className="field">
         <span>消費歸屬</span>
         <select className="select" value={target} onChange={(event) => setTarget(event.target.value as PersonTarget)}>
@@ -162,7 +188,7 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
       ) : null}
       <label className="field">
         <span>備註</span>
-        <input className="input" value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如醫院訂飯、全聯、管理費" />
+        <input className="input" value={note} onChange={(event) => setNote(event.target.value)} placeholder="可空白，或輸入補充說明" />
       </label>
       <button className="btn" type="button" onClick={handleSave} disabled={isSaving}>{isSaving ? "儲存中..." : "儲存"}</button>
       {message ? <p className="muted">{message}</p> : null}
