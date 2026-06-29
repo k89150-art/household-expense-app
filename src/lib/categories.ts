@@ -34,8 +34,5 @@ export const PAYER_LABELS = {
 export const PAYMENT_METHOD_LABELS = {
   cash: "現金",
   credit_card: "信用卡",
-  bank_transfer: "轉帳",
-  line_pay: "LINE Pay",
-  prepaid: "預付金",
   other: "其他",
 } as const;
