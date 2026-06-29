@@ -51,9 +51,28 @@ export type InvestmentRecord = {
   updatedAt?: unknown;
 };
 
+export type AdvanceRecord = {
+  id: string;
+  householdId: string;
+  date: string;
+  amount: number;
+  owner: OwnerKey;
+  item: string;
+  target: "醫院" | "太太" | "先生" | "其他";
+  status: "待核銷" | "已送件" | "已收回";
+  paymentMethod: PaymentMethod;
+  creditCard?: CreditCardName;
+  reimbursedDate?: string;
+  note?: string;
+  createdBy: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+};
+
 export type NewExpenseInput = Omit<ExpenseRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
 export type NewIncomeInput = Omit<IncomeRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
 export type NewInvestmentInput = Omit<InvestmentRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
+export type NewAdvanceInput = Omit<AdvanceRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
 
 type FirestoreWritable = Record<string, string | number | boolean | unknown>;
 
@@ -118,5 +137,23 @@ export async function getInvestmentRecordsByMonth(month: string) {
 
 export async function deleteInvestmentRecord(id: string) {
   const docRef = doc(db, "households", HOUSEHOLD_ID, "investments", id);
+  await deleteDoc(docRef);
+}
+
+export async function addAdvanceRecord(input: NewAdvanceInput) {
+  await addRecord("advances", input);
+}
+
+export async function getAdvanceRecordsByMonth(month: string) {
+  return getRecordsByMonth<AdvanceRecord>("advances", month);
+}
+
+export async function updateAdvanceRecord(id: string, input: Partial<NewAdvanceInput>) {
+  const docRef = doc(db, "households", HOUSEHOLD_ID, "advances", id);
+  await updateDoc(docRef, removeUndefinedFields({ ...input, updatedAt: serverTimestamp() }));
+}
+
+export async function deleteAdvanceRecord(id: string) {
+  const docRef = doc(db, "households", HOUSEHOLD_ID, "advances", id);
   await deleteDoc(docRef);
 }
