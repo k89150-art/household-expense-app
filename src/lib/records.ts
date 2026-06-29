@@ -185,8 +185,10 @@ export async function getCardPaymentRecordsByMonth(month: string) {
 
 export async function getCardPaymentRecordsByBillMonth(month: string) {
   const collectionRef = collection(db, "households", HOUSEHOLD_ID, "cardPayments");
-  const snapshot = await getDocs(query(collectionRef, where("billMonth", "==", month), orderBy("date", "desc")));
-  return snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() })) as CardPaymentRecord[];
+  const snapshot = await getDocs(query(collectionRef, where("billMonth", "==", month)));
+  return snapshot.docs
+    .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as CardPaymentRecord)
+    .sort((a, b) => b.date.localeCompare(a.date));
 }
 
 export async function deleteCardPaymentRecord(id: string) {
