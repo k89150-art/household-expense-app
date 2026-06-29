@@ -44,6 +44,9 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
   const [childPaidBy, setChildPaidBy] = useState<"self" | "spouse">("self");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [creditCard, setCreditCard] = useState<CreditCardName>(creditCards[0]);
+  const [isInstallment, setIsInstallment] = useState(false);
+  const [installmentCurrent, setInstallmentCurrent] = useState("1");
+  const [installmentTotal, setInstallmentTotal] = useState("3");
   const [isPrivate, setIsPrivate] = useState(false);
   const [privateNote, setPrivateNote] = useState("");
   const [note, setNote] = useState("");
@@ -82,7 +85,10 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
       ? (viewer === "chris" ? "wife" : "chris")
       : viewer;
     const subItem = getSubItem();
-    const finalNote = [subItem, note.trim()].filter(Boolean).join("・") || undefined;
+    const installmentNote = paymentMethod === "credit_card" && isInstallment
+      ? `分期 ${installmentCurrent}/${installmentTotal}`
+      : "";
+    const finalNote = [subItem, installmentNote, note.trim()].filter(Boolean).join("・") || undefined;
 
     setIsSaving(true);
     setMessage("");
@@ -169,12 +175,30 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
         </select>
       </label>
       {paymentMethod === "credit_card" ? (
-        <label className="field">
-          <span>選擇信用卡</span>
-          <select className="select" value={creditCard} onChange={(event) => setCreditCard(event.target.value as CreditCardName)}>
-            {creditCards.map((card) => <option key={card}>{card}</option>)}
-          </select>
-        </label>
+        <>
+          <label className="field">
+            <span>選擇信用卡</span>
+            <select className="select" value={creditCard} onChange={(event) => setCreditCard(event.target.value as CreditCardName)}>
+              {creditCards.map((card) => <option key={card}>{card}</option>)}
+            </select>
+          </label>
+          <label className="row" style={{ justifyContent: "flex-start" }}>
+            <input type="checkbox" checked={isInstallment} onChange={(event) => setIsInstallment(event.target.checked)} />
+            <span>信用卡分期</span>
+          </label>
+          {isInstallment ? (
+            <div className="row">
+              <label className="field" style={{ flex: 1 }}>
+                <span>第幾期</span>
+                <input className="input" type="number" min="1" inputMode="numeric" value={installmentCurrent} onChange={(event) => setInstallmentCurrent(event.target.value)} />
+              </label>
+              <label className="field" style={{ flex: 1 }}>
+                <span>共幾期</span>
+                <input className="input" type="number" min="2" inputMode="numeric" value={installmentTotal} onChange={(event) => setInstallmentTotal(event.target.value)} />
+              </label>
+            </div>
+          ) : null}
+        </>
       ) : null}
       <label className="row" style={{ justifyContent: "flex-start" }}>
         <input type="checkbox" checked={isPrivate} onChange={(event) => setIsPrivate(event.target.checked)} />
