@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
 import { EXPENSE_CATEGORIES, HOME_FEE_ITEMS, PAYMENT_METHOD_LABELS, TAX_ITEMS } from "@/lib/categories";
+import { localDateString } from "@/lib/date";
 import { InstallmentScheduleItem, addExpenseRecord } from "@/lib/records";
 import { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
 
@@ -25,10 +26,6 @@ const CHILD_PAYER_LABEL = {
 
 function getCreditCards(viewer: Props["viewer"]): CreditCardName[] {
   return viewer === "chris" ? ["玉山", "國泰", "中信"] : ["台新", "國泰", "中信"];
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function shiftMonth(yyyymm: string, diff: number) {
@@ -55,7 +52,7 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
   const selfTarget: PersonTarget = viewer === "chris" ? "chris" : "wife";
   const creditCards = useMemo(() => getCreditCards(viewer), [viewer]);
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(today());
+  const [date, setDate] = useState(localDateString());
   const [category, setCategory] = useState<ExpenseCategory>("餐飲");
   const [homeFeeItem, setHomeFeeItem] = useState<(typeof HOME_FEE_ITEMS)[number]>("水費");
   const [taxItem, setTaxItem] = useState<(typeof TAX_ITEMS)[number]>("牌照稅");
@@ -66,7 +63,7 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
   const [isInstallment, setIsInstallment] = useState(false);
   const [installmentTotal, setInstallmentTotal] = useState("6");
   const [installmentFee, setInstallmentFee] = useState("0");
-  const [firstBillMonth, setFirstBillMonth] = useState(today().slice(0, 7));
+  const [firstBillMonth, setFirstBillMonth] = useState(localDateString().slice(0, 7));
   const [isPrivate, setIsPrivate] = useState(false);
   const [privateNote, setPrivateNote] = useState("");
   const [note, setNote] = useState("");

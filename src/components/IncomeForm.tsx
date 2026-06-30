@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
+import { localDateString } from "@/lib/date";
 import { Viewer, getViewerByEmail } from "@/lib/household";
 import { addIncomeRecord } from "@/lib/records";
 
@@ -14,14 +15,10 @@ type Props = {
 
 const INCOME_TYPES: IncomeType[] = ["本薪", "獎勵金", "加班費", "年終", "生活費轉入", "其他"];
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export function IncomeForm({ viewer, onSaved }: Props) {
   const user = useCurrentUser();
   const owner = viewer ?? getViewerByEmail(user?.email);
-  const [date, setDate] = useState(today());
+  const [date, setDate] = useState(localDateString());
   const [incomeType, setIncomeType] = useState<IncomeType>("本薪");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");

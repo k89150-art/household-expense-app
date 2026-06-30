@@ -2,16 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
+import { localDateString } from "@/lib/date";
 import { Viewer, getViewerByEmail } from "@/lib/household";
 import { addAdvanceRecord, CreditCardName } from "@/lib/records";
 import { PaymentMethod } from "@/types/domain";
 
 type Props = { viewer?: Viewer; onSaved?: () => void };
 type AdvanceStatus = "待處理" | "已送件" | "已收回";
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function getCards(viewer: Viewer): CreditCardName[] {
   return viewer === "chris" ? ["玉山", "國泰", "中信"] : ["台新", "國泰", "中信"];
@@ -21,7 +18,7 @@ export function AdvanceForm({ viewer, onSaved }: Props) {
   const user = useCurrentUser();
   const owner = viewer ?? getViewerByEmail(user?.email);
   const cards = useMemo(() => getCards(owner), [owner]);
-  const [date, setDate] = useState(today());
+  const [date, setDate] = useState(localDateString());
   const [item, setItem] = useState("");
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState<AdvanceStatus>("待處理");

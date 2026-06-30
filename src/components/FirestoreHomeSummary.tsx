@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
+import { currentMonthString, localDateString } from "@/lib/date";
 import {
   addCardPaymentRecord,
   deleteAdvanceRecord,
@@ -44,18 +45,6 @@ const TARGET_LABELS: Record<string, string> = { chris: "我", wife: "我", junya
 
 function money(value = 0) {
   return `$${value.toLocaleString("zh-TW")}`;
-}
-
-function localDate() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function currentMonth() {
-  return localDate().slice(0, 7);
 }
 
 function shiftMonth(yyyymm: string, diff: number) {
@@ -177,7 +166,7 @@ function getErrorCode(error: unknown) {
 
 export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const user = useCurrentUser();
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth());
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthString());
   const [scope, setScope] = useState<Scope>("month");
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [incomes, setIncomes] = useState<IncomeRecord[]>([]);
@@ -261,7 +250,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
 
   async function handleAdvanceStatus(record: AdvanceRecord, status: AdvanceRecord["status"]) {
     if (!window.confirm(`確定要把「${record.item}」改成${status}嗎？`)) return;
-    await updateAdvanceRecord(record.id, { status, reimbursedDate: status === "已收回" ? localDate() : undefined });
+    await updateAdvanceRecord(record.id, { status, reimbursedDate: status === "已收回" ? localDateString() : undefined });
     await loadRecords();
   }
 
@@ -291,7 +280,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       return;
     }
     if (!window.confirm(`確定要建立 ${card} ${billMonth} 帳單繳款 ${money(amount)} 嗎？`)) return;
-    await addCardPaymentRecord({ date: localDate(), amount, owner: viewer, card: card as CreditCardName, billMonth, status: "已繳款", paidDate: localDate(), note: `${billMonth} ${card}帳單繳款`, createdBy: user.uid });
+    await addCardPaymentRecord({ date: localDateString(), amount, owner: viewer, card: card as CreditCardName, billMonth, status: "已繳款", paidDate: localDateString(), note: `${billMonth} ${card}帳單繳款`, createdBy: user.uid });
     await loadRecords();
   }
 
