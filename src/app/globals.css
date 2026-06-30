@@ -183,7 +183,8 @@ h2 {
 .input[type="date"],
 .input[type="month"] {
   min-height: 44px;
-  appearance: auto;
+  min-width: 0;
+  line-height: 1.2;
 }
 
 .input:focus,
@@ -269,13 +270,32 @@ h2 {
 
   .input[type="date"],
   .input[type="month"] {
+    width: calc(100% - 4px);
+    justify-self: center;
+    appearance: none;
+    -webkit-appearance: none;
     padding-left: 8px;
     padding-right: 8px;
   }
 
   .month-picker {
-    grid-template-columns: minmax(78px, 0.9fr) minmax(120px, 1.15fr) minmax(78px, 0.9fr);
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "month month"
+      "prev next";
     gap: 8px;
+  }
+
+  .month-picker .month-field {
+    grid-area: month;
+  }
+
+  .month-picker .btn:first-child {
+    grid-area: prev;
+  }
+
+  .month-picker .btn:last-child {
+    grid-area: next;
   }
 
   .month-picker .btn,
