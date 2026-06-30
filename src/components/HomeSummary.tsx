@@ -106,11 +106,6 @@ function shiftMonth(yyyymm: string, diff: number) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function monthLabel(yyyymm: string) {
-  const [year, month] = yyyymm.split("-");
-  return `${year} 年 ${Number(month)} 月`;
-}
-
 function groupByCategory(expenses: ExpenseLine[]) {
   return expenses.reduce<Record<string, ExpenseLine[]>>((groups, expense) => {
     groups[expense.category] = [...(groups[expense.category] ?? []), expense];
@@ -166,12 +161,18 @@ export function HomeSummary({ viewer }: { viewer: Viewer }) {
   return (
     <section className="grid">
       <article className="card grid">
-        <div className="row">
+        <div className="month-picker">
           <button className="btn secondary" type="button" onClick={() => setSelectedMonth((value) => shiftMonth(value, -1))}>上個月</button>
-          <strong>{monthLabel(selectedMonth)}</strong>
+          <label className="month-field">
+            <span>月份</span>
+            <input className="input month-input" type="month" value={selectedMonth} onChange={(event) => {
+              setSelectedMonth(event.target.value);
+              setScope("month");
+            }} />
+          </label>
           <button className="btn secondary" type="button" onClick={() => setSelectedMonth((value) => shiftMonth(value, 1))}>下個月</button>
         </div>
-        <div className="row">
+        <div className="scope-toggle">
           <button className={scope === "month" ? "btn" : "btn secondary"} type="button" onClick={() => setScope("month")}>當月</button>
           <button className={scope === "all" ? "btn" : "btn secondary"} type="button" onClick={() => setScope("all")}>全部月份</button>
         </div>
