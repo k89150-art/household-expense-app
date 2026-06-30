@@ -30,10 +30,13 @@ function HouseholdApp() {
 
   return (
     <main className="container grid">
-      <header className="grid" style={{ paddingTop: 8 }}>
-        <div className="muted">{todayText}</div>
-        <h1 style={{ margin: 0 }}>夫妻家庭帳本</h1>
-        <p className="muted" style={{ margin: 0 }}>目前帳號：{viewer === "chris" ? "我的手機" : "太太手機"}</p>
+      <header className="app-header">
+        <div>
+          <div className="eyebrow">{todayText}</div>
+          <h1>一起記</h1>
+          <p>家庭收支</p>
+        </div>
+        <div className="viewer-pill">{viewer === "chris" ? "我的手機" : "太太手機"}</div>
       </header>
 
       {activeTab === "home" ? <FirestoreHomeSummary viewer={viewer} refreshKey={refreshKey} /> : null}
@@ -71,10 +74,10 @@ function HouseholdApp() {
       ) : null}
 
       <nav className="nav">
-        <button type="button" onClick={() => setActiveTab("home")}>首頁</button>
-        <button type="button" onClick={() => setActiveTab("add")}>新增</button>
-        <button type="button" onClick={() => setActiveTab("fixed")}>固定</button>
-        <button type="button" onClick={() => setActiveTab("report")}>報表</button>
+        <button className={activeTab === "home" ? "active" : ""} type="button" onClick={() => setActiveTab("home")}>首頁</button>
+        <button className={activeTab === "add" ? "active" : ""} type="button" onClick={() => setActiveTab("add")}>新增</button>
+        <button className={activeTab === "fixed" ? "active" : ""} type="button" onClick={() => setActiveTab("fixed")}>固定</button>
+        <button className={activeTab === "report" ? "active" : ""} type="button" onClick={() => setActiveTab("report")}>報表</button>
       </nav>
     </main>
   );

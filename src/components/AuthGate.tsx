@@ -45,7 +45,7 @@ export function AuthGate({ children }: Props) {
     return (
       <main className="container grid">
         <section className="card grid">
-          <h1>夫妻家庭帳本</h1>
+          <h1>一起記</h1>
           <p className="muted">正在確認登入狀態...</p>
         </section>
       </main>
@@ -56,8 +56,8 @@ export function AuthGate({ children }: Props) {
     return (
       <main className="container grid">
         <section className="card grid">
-          <h1>夫妻家庭帳本</h1>
-          <p className="muted">正式版需要先登入，之後資料會依帳號分成我的手機與太太手機。</p>
+          <h1>一起記</h1>
+          <p className="muted">登入後即可查看家庭收支與新增紀錄。</p>
           <button className="btn" type="button" onClick={handleSignIn}>使用 Google 登入</button>
           {message ? <p className="muted">{message}</p> : null}
         </section>
@@ -68,7 +68,7 @@ export function AuthGate({ children }: Props) {
   return (
     <AuthUserContext.Provider value={user}>
       <section className="container" style={{ paddingBottom: 0 }}>
-        <div className="card row" style={{ boxShadow: "none" }}>
+        <div className="account-bar">
           <div>
             <strong>{user.displayName ?? user.email}</strong>
             <div className="muted">{user.email}</div>

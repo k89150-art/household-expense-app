@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
-import { firebaseProjectId } from "@/lib/firebase";
 import {
   addCardPaymentRecord,
   deleteAdvanceRecord,
@@ -225,7 +224,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       setDueBillPayments(duePaymentData);
     } catch (error) {
       console.error(error);
-      setMessage(`讀取資料失敗：${getErrorCode(error)}。Project: ${firebaseProjectId}，UID: ${user?.uid ?? "未登入"}。請確認這個 UID 有放在 households/default-household 的 memberIds。`);
+      setMessage(`讀取資料失敗，請稍後再試或確認 Firebase 設定。錯誤：${getErrorCode(error)}`);
     } finally {
       setIsLoading(false);
     }

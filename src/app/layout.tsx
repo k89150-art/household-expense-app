@@ -2,12 +2,12 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "夫妻家庭帳本",
-  description: "iPhone friendly household expense tracker",
-  applicationName: "家帳",
+  title: "一起記",
+  description: "家庭收支記帳工具",
+  applicationName: "一起記",
   appleWebApp: {
     capable: true,
-    title: "家帳",
+    title: "一起記",
     statusBarStyle: "default",
   },
   icons: {
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#23865F",
+  themeColor: "#2F6F68",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,6 +1,6 @@
-# 夫妻家庭帳本
+# 一起記
 
-iPhone 優先的正式版家庭記帳 App，使用 Next.js + Firebase + Vercel。
+iPhone 優先的家庭收支 App，使用 Next.js + Firebase + Vercel。
 
 ## 核心特色
 
