@@ -311,6 +311,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const pendingAdvance = pendingAdvanceRecords.reduce((sum, record) => sum + record.amount, 0);
   const reimbursedAdvance = advances.filter((record) => record.status === "已收回").reduce((sum, record) => sum + record.amount, 0);
   const cardPaymentTotal = cardPayments.reduce((sum, record) => sum + record.amount, 0);
+  const advanceCashFlow = paidNowAdvance - reimbursedAdvance;
   const availableBalance = totalIncome - paidNowExpense - paidNowAdvance - cardPaymentTotal - totalInvestment + reimbursedAdvance;
   const groupedTargets = useMemo(() => groupByTarget(expenses), [expenses]);
   const groupedIncomes = useMemo(() => groupByOwner(incomes), [incomes]);
@@ -340,7 +341,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
         <div className="row"><span>已付生活支出</span><strong>{money(paidNowExpense)}</strong></div>
         <div className="row"><span>信用卡繳款</span><strong>{money(cardPaymentTotal)}</strong></div>
         <div className="row"><span>投資</span><strong>{money(totalInvestment)}</strong></div>
-        <div className="row"><span>代墊款現金流</span><strong>{money(paidNowAdvance - reimbursedAdvance)}</strong></div>
+        {advanceCashFlow !== 0 ? <div className="row"><span>代墊款現金流</span><strong>{money(advanceCashFlow)}</strong></div> : null}
         <p className="muted" style={{ margin: 0 }}>信用卡消費先在刷卡核對；實際繳款後才會扣可用剩餘。</p>
         {isLoading ? <p className="muted">讀取中...</p> : null}
         {message ? <p className="muted">{message}</p> : null}
