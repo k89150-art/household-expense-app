@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc, where, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { HOUSEHOLD_ID } from "@/lib/household";
 import { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
@@ -123,14 +123,18 @@ function removeUndefinedFields<T extends Record<string, unknown>>(value: T) {
   return Object.fromEntries(Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined)) as FirestoreWritable;
 }
 
-async function addRecord(collectionName: string, input: Record<string, unknown>) {
-  const collectionRef = collection(db, "households", HOUSEHOLD_ID, collectionName);
-  const docRef = await addDoc(collectionRef, removeUndefinedFields({
+function recordData(input: Record<string, unknown>) {
+  return removeUndefinedFields({
     ...input,
     householdId: HOUSEHOLD_ID,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  }));
+  });
+}
+
+async function addRecord(collectionName: string, input: Record<string, unknown>) {
+  const collectionRef = collection(db, "households", HOUSEHOLD_ID, collectionName);
+  const docRef = await addDoc(collectionRef, recordData(input));
   return docRef.id;
 }
 
@@ -154,15 +158,23 @@ async function getAllRecords<T>(collectionName: string) {
 
 export async function addExpenseRecord(input: NewExpenseInput) {
   const { privateNote, ...publicExpense } = input;
-  const expenseId = await addRecord("expenses", publicExpense);
 
   if (input.isPrivate && privateNote?.trim()) {
-    await addRecord("privateExpenseDetails", {
-      expenseId,
+    const batch = writeBatch(db);
+    const expenseRef = doc(collection(db, "households", HOUSEHOLD_ID, "expenses"));
+    const privateDetailRef = doc(collection(db, "households", HOUSEHOLD_ID, "privateExpenseDetails"));
+
+    batch.set(expenseRef, recordData(publicExpense));
+    batch.set(privateDetailRef, recordData({
+      expenseId: expenseRef.id,
       ownerId: input.createdBy,
       privateNote: privateNote.trim(),
-    });
+    }));
+    await batch.commit();
+    return;
   }
+
+  await addRecord("expenses", publicExpense);
 }
 
 export async function getExpenseRecordsByMonth(month: string) {
