@@ -131,9 +131,9 @@ function HouseholdApp() {
       </div>
 
       <nav className={isQuickMenuOpen ? "compose menu-open" : "compose"}>
-        <button className={activeTab === "home" ? "active" : ""} type="button" onClick={() => openTab("home")}>首頁</button>
+        <button data-nav="home" className={activeTab === "home" ? "active" : ""} type="button" onClick={() => openTab("home")}>首頁</button>
         <button className="fab" type="button" aria-label="快速新增" aria-expanded={isQuickMenuOpen} onClick={() => setIsQuickMenuOpen((value) => !value)}>+</button>
-        <button className={activeTab === "report" ? "active" : ""} type="button" onClick={() => openTab("report")}>報表</button>
+        <button data-nav="reports" className={activeTab === "report" ? "active" : ""} type="button" onClick={() => openTab("report")}>報表</button>
       </nav>
     </main>
   );

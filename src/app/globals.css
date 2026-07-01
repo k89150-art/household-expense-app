@@ -67,6 +67,12 @@ h2 {
   padding: 18px 14px 114px;
 }
 
+.account-shell {
+  width: min(100%, 430px);
+  margin: 0 auto;
+  padding: 14px 14px 0;
+}
+
 .grid {
   display: grid;
   gap: 12px;
@@ -252,6 +258,19 @@ h2 {
   background: rgba(255, 250, 243, 0.62);
 }
 
+.card > button.row {
+  width: 100%;
+  color: inherit;
+}
+
+.card > button.row h2 {
+  color: var(--espresso);
+}
+
+.card > button.row strong:last-child {
+  color: var(--copper-deep);
+}
+
 .account-bar {
   display: flex;
   align-items: center;
@@ -259,8 +278,22 @@ h2 {
   gap: 12px;
   border: 1px solid var(--hair);
   border-radius: 22px;
-  padding: 12px;
-  background: rgba(255, 250, 243, 0.72);
+  padding: 10px 12px;
+  background: rgba(255, 250, 243, 0.5);
+  box-shadow: 0 10px 22px rgba(60, 43, 32, 0.06);
+}
+
+.account-bar .muted {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-bar .btn {
+  width: auto;
+  min-width: 74px;
+  padding: 10px 14px;
 }
 
 .amount {
@@ -553,6 +586,10 @@ textarea {
 
 .compose [data-nav="home"] {
   grid-column: 1;
+}
+
+.compose .fab {
+  grid-column: 2;
 }
 
 .compose [data-nav="reports"] {

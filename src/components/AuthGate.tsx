@@ -67,7 +67,7 @@ export function AuthGate({ children }: Props) {
 
   return (
     <AuthUserContext.Provider value={user}>
-      <section className="container" style={{ paddingBottom: 0 }}>
+      <section className="account-shell">
         <div className="account-bar">
           <div>
             <strong>{user.displayName ?? user.email}</strong>
