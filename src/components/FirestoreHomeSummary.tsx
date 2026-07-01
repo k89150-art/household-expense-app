@@ -309,7 +309,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const dueCreditCardTotal = Object.values(dueCreditCardGroups).flat().reduce((sum, record) => sum + record.amount, 0);
 
   return (
-    <section className="grid">
+    <section className="home-summary grid">
       <article className="card grid">
         <div className="month-picker">
           <button className="btn secondary" type="button" onClick={() => setSelectedMonth((value) => shiftMonth(value, -1))}>上個月</button>
