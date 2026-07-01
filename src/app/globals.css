@@ -233,6 +233,33 @@ h2 {
   width: 100%;
 }
 
+.record-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.record-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.record-actions {
+  display: grid;
+  grid-template-columns: minmax(56px, auto) 76px;
+  align-items: center;
+  gap: 8px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.delete-btn {
+  width: 76px;
+  min-height: 40px;
+  padding: 8px 10px;
+}
+
 .nav {
   position: sticky;
   bottom: 0;

@@ -350,7 +350,10 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           {incomes.length === 0 ? <p className="muted">這個月份沒有收入資料</p> : null}
           {Object.entries(groupedIncomes).map(([owner, ownerRecords]) => <div className="card grid" style={{ boxShadow: "none" }} key={owner}>
             <div className="row"><strong>{ownerLabel(owner as "chris" | "wife", viewer)}</strong><strong>{money(ownerRecords.reduce((sum, record) => sum + record.amount, 0))}</strong></div>
-            {ownerRecords.map((record) => <div className="row" key={record.id}><span>{record.date.slice(5)}　{record.category}{record.note ? `・${record.note}` : ""}</span><span className="muted">{money(record.amount)} <button className="btn secondary" type="button" onClick={() => handleDeleteIncome(record.id)} style={{ marginLeft: 8 }}>刪除</button></span></div>)}
+            {ownerRecords.map((record) => <div className="record-row" key={record.id}>
+              <span className="record-title">{record.date.slice(5)}　{record.category}{record.note ? `・${record.note}` : ""}</span>
+              <span className="record-actions"><span className="muted">{money(record.amount)}</span><button className="btn secondary delete-btn" type="button" onClick={() => handleDeleteIncome(record.id)}>刪除</button></span>
+            </div>)}
           </div>)}
         </div> : null}
       </article>
@@ -375,9 +378,9 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
               <button className="row" type="button" onClick={() => setOpenedCategory(isCategoryOpen ? null : categoryKey)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
                 <strong>{category}</strong><span className="muted">{money(categoryTotal)}・{isCategoryOpen ? "收合" : "明細"}</span>
               </button>
-              {isCategoryOpen ? <div className="grid">{categoryRecords.map((record) => <div className="row" key={record.id}>
-                <span>{record.date.slice(5)}　{record.isPrivate ? "個人雜支" : record.note || record.category}</span>
-                <span className="muted">{money(record.amount)}{record.creditCard ? `・${record.creditCard}` : ""}{record.target === "junyao" ? `・${displayPaidBy(record, viewer)}付` : ""}<button className="btn secondary" type="button" onClick={() => handleDeleteExpense(record.id)} style={{ marginLeft: 8 }}>刪除</button></span>
+              {isCategoryOpen ? <div className="grid">{categoryRecords.map((record) => <div className="record-row" key={record.id}>
+                <span className="record-title">{record.date.slice(5)}　{record.isPrivate ? "個人雜支" : record.note || record.category}</span>
+                <span className="record-actions"><span className="muted">{money(record.amount)}{record.creditCard ? `・${record.creditCard}` : ""}{record.target === "junyao" ? `・${displayPaidBy(record, viewer)}付` : ""}</span><button className="btn secondary delete-btn" type="button" onClick={() => handleDeleteExpense(record.id)}>刪除</button></span>
               </div>)}</div> : null}
             </div>;
           })}</div> : null}
@@ -393,7 +396,10 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           {investments.length === 0 ? <p className="muted">這個月份沒有投資紀錄</p> : null}
           {Object.entries(groupedInvestments).map(([owner, ownerRecords]) => <div className="card grid" style={{ boxShadow: "none" }} key={owner}>
             <div className="row"><strong>{ownerLabel(owner as "chris" | "wife", viewer)}</strong><strong>{money(ownerRecords.reduce((sum, record) => sum + record.amount, 0))}</strong></div>
-            {ownerRecords.map((record) => <div className="row" key={record.id}><span>{record.date.slice(5)}　{record.type}・{record.name}{record.note ? `・${record.note}` : ""}</span><span className="muted">{money(record.amount)} <button className="btn secondary" type="button" onClick={() => handleDeleteInvestment(record.id)} style={{ marginLeft: 8 }}>刪除</button></span></div>)}
+            {ownerRecords.map((record) => <div className="record-row" key={record.id}>
+              <span className="record-title">{record.date.slice(5)}　{record.type}・{record.name}{record.note ? `・${record.note}` : ""}</span>
+              <span className="record-actions"><span className="muted">{money(record.amount)}</span><button className="btn secondary delete-btn" type="button" onClick={() => handleDeleteInvestment(record.id)}>刪除</button></span>
+            </div>)}
           </div>)}
         </div> : null}
       </article>
