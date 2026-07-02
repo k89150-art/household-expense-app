@@ -99,9 +99,11 @@ function HouseholdApp() {
           {addMode === "income" ? <IncomeForm viewer={viewer} onSaved={refreshRecords} /> : null}
           {addMode === "investment" ? <InvestmentForm viewer={viewer} onSaved={refreshRecords} /> : null}
           {addMode === "advance" ? <AdvanceForm viewer={viewer} onSaved={refreshRecords} /> : null}
-          <aside className="desktop-fixed-panel">
-            <RecurringExpensePanel viewer={viewer} />
-          </aside>
+          {addMode === "expense" ? (
+            <aside className="desktop-fixed-panel">
+              <RecurringExpensePanel viewer={viewer} />
+            </aside>
+          ) : null}
         </section>
       ) : null}
 
