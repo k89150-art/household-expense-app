@@ -95,11 +95,12 @@ h2 {
   min-height: 260px;
   border-radius: 34px;
   padding: 20px;
-  color: #fff8ed;
+  color: var(--espresso);
   background:
-    linear-gradient(145deg, rgba(255, 248, 237, 0.18), transparent 34%),
-    linear-gradient(155deg, #3a2822 0%, #5b4052 54%, #b66f4d 130%);
-  box-shadow: var(--shadow);
+    radial-gradient(circle at 90% -8%, rgba(255, 250, 243, 0.92) 0 22%, transparent 23%),
+    radial-gradient(circle at 88% 8%, rgba(214, 160, 111, 0.42) 0 30%, transparent 31%),
+    linear-gradient(145deg, #fff6e9 0%, #edd7bf 48%, #c98a63 118%);
+  box-shadow: 0 18px 38px rgba(157, 103, 72, 0.2);
   isolation: isolate;
 }
 
@@ -112,8 +113,8 @@ h2 {
   top: -76px;
   border-radius: 50%;
   background:
-    radial-gradient(circle, rgba(239, 208, 138, 0.82) 0 18%, transparent 19%),
-    radial-gradient(circle, rgba(255, 248, 237, 0.28) 0 52%, transparent 53%);
+    radial-gradient(circle, rgba(255, 248, 237, 0.82) 0 21%, transparent 22%),
+    radial-gradient(circle, rgba(145, 92, 70, 0.18) 0 52%, transparent 53%);
   z-index: -1;
 }
 
@@ -124,7 +125,7 @@ h2 {
   right: 22px;
   bottom: 96px;
   height: 1px;
-  background: rgba(255, 248, 237, 0.24);
+  background: rgba(51, 36, 31, 0.14);
 }
 
 .cover-top {
@@ -137,7 +138,7 @@ h2 {
 .brand-kicker,
 .eyebrow {
   margin: 0;
-  color: rgba(255, 248, 237, 0.7);
+  color: rgba(51, 36, 31, 0.68);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -149,10 +150,10 @@ h2 {
   height: 42px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 248, 237, 0.24);
+  border: 1px solid rgba(51, 36, 31, 0.1);
   border-radius: 50%;
-  background: rgba(255, 248, 237, 0.1);
-  color: #fff8ed;
+  background: rgba(255, 248, 237, 0.58);
+  color: var(--copper-deep);
   font-weight: 900;
 }
 
@@ -172,7 +173,7 @@ h2 {
 .cover-title p {
   max-width: 260px;
   margin: 12px 0 0;
-  color: rgba(255, 248, 237, 0.72);
+  color: rgba(51, 36, 31, 0.68);
   font-size: 13px;
   line-height: 1.55;
   font-weight: 650;
@@ -191,7 +192,7 @@ h2 {
 
 .balance-line span {
   display: block;
-  color: rgba(255, 248, 237, 0.68);
+  color: rgba(51, 36, 31, 0.58);
   font-size: 12px;
   font-weight: 800;
 }
@@ -205,11 +206,11 @@ h2 {
 }
 
 .month-pill {
-  border: 1px solid rgba(255, 248, 237, 0.22);
+  border: 1px solid rgba(51, 36, 31, 0.12);
   border-radius: 999px;
   padding: 9px 12px;
-  background: rgba(255, 248, 237, 0.12);
-  color: #fff8ed;
+  background: rgba(255, 248, 237, 0.42);
+  color: var(--espresso);
   font-size: 13px;
   font-weight: 850;
   white-space: nowrap;
@@ -421,10 +422,11 @@ textarea {
   border-radius: 34px;
   padding: 20px;
   background:
-    radial-gradient(circle at 88% 12%, rgba(239, 208, 138, 0.5), transparent 24%),
-    linear-gradient(145deg, #36251f 0%, #5b4052 58%, #b66f4d 135%);
-  color: #fff8ed;
-  box-shadow: 0 22px 44px rgba(60, 43, 32, 0.2);
+    radial-gradient(circle at 88% 8%, rgba(255, 248, 237, 0.78), transparent 22%),
+    radial-gradient(circle at 100% 96%, rgba(182, 111, 77, 0.25), transparent 28%),
+    linear-gradient(145deg, #fff8ed 0%, #edd9c5 54%, #c68463 140%);
+  color: var(--espresso);
+  box-shadow: 0 18px 38px rgba(157, 103, 72, 0.18);
 }
 
 .home-summary > .card:nth-child(2)::after {
@@ -435,7 +437,7 @@ textarea {
   width: 150px;
   height: 150px;
   border-radius: 50%;
-  background: rgba(255, 248, 237, 0.12);
+  background: rgba(143, 80, 56, 0.12);
 }
 
 .home-summary > .card:nth-child(2) h2 {
@@ -443,7 +445,7 @@ textarea {
   z-index: 1;
   max-width: 220px;
   margin-bottom: 14px;
-  color: #fff8ed;
+  color: var(--espresso);
   font-family: ui-serif, "Songti TC", "Noto Serif TC", Georgia, serif;
   font-size: 26px;
   line-height: 1.18;
@@ -453,8 +455,8 @@ textarea {
   position: relative;
   z-index: 1;
   min-height: 34px;
-  border-top: 1px solid rgba(255, 248, 237, 0.12);
-  color: rgba(255, 248, 237, 0.78);
+  border-top: 1px solid rgba(51, 36, 31, 0.12);
+  color: rgba(51, 36, 31, 0.68);
 }
 
 .home-summary > .card:nth-child(2) .row:first-of-type {
@@ -469,19 +471,19 @@ textarea {
 }
 
 .home-summary > .card:nth-child(2) .row:first-of-type strong {
-  color: #fff8ed;
+  color: var(--copper-deep);
   font-size: 36px;
   line-height: 1;
 }
 
 .home-summary > .card:nth-child(2) strong {
-  color: #fff8ed;
+  color: var(--espresso);
 }
 
 .home-summary > .card:nth-child(2) .muted {
   position: relative;
   z-index: 1;
-  color: rgba(255, 248, 237, 0.62);
+  color: rgba(51, 36, 31, 0.56);
 }
 
 .home-summary > .card:nth-child(n+3) {
@@ -569,11 +571,12 @@ textarea {
   position: relative;
   border-radius: 34px;
   padding: 22px;
-  color: #fff8ed;
+  color: var(--espresso);
   background:
-    radial-gradient(circle at 18% 0%, rgba(239, 208, 138, 0.38), transparent 26%),
-    linear-gradient(140deg, #33241f 0%, #5b4052 64%, #b66f4d 140%);
-  box-shadow: 0 22px 44px rgba(60, 43, 32, 0.2);
+    radial-gradient(circle at 18% 0%, rgba(255, 250, 243, 0.72), transparent 28%),
+    radial-gradient(circle at 100% 15%, rgba(214, 160, 111, 0.28), transparent 28%),
+    linear-gradient(140deg, #fff6e9 0%, #edd9c5 58%, #c68463 135%);
+  box-shadow: 0 18px 38px rgba(157, 103, 72, 0.18);
 }
 
 .report-hero::after {
@@ -584,12 +587,12 @@ textarea {
   width: 170px;
   height: 170px;
   border-radius: 50%;
-  background: rgba(255, 248, 237, 0.12);
+  background: rgba(143, 80, 56, 0.1);
 }
 
 .report-kicker {
   margin: 0 0 10px;
-  color: rgba(255, 248, 237, 0.62);
+  color: rgba(51, 36, 31, 0.55);
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.1em;
@@ -597,7 +600,7 @@ textarea {
 
 .report-hero h2 {
   margin: 0;
-  color: #fff8ed;
+  color: var(--espresso);
   font-family: ui-serif, "Songti TC", "Noto Serif TC", Georgia, serif;
   font-size: 34px;
   line-height: 1;
@@ -605,7 +608,7 @@ textarea {
 
 .report-hero p:not(.report-kicker) {
   margin: 10px 0 0;
-  color: rgba(255, 248, 237, 0.68);
+  color: rgba(51, 36, 31, 0.62);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -619,11 +622,11 @@ textarea {
 }
 
 .report-hero .positive {
-  color: #f8df9f;
+  color: var(--copper-deep);
 }
 
 .report-hero .negative {
-  color: #ffd0c4;
+  color: #9f3f35;
 }
 
 .report-controls {
