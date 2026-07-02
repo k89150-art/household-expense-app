@@ -274,6 +274,10 @@ h2 {
   margin-top: 14px;
 }
 
+.desktop-fixed-panel {
+  display: none;
+}
+
 .card,
 .panel {
   border: 1px solid var(--hair);
@@ -1124,6 +1128,15 @@ textarea {
   .page-section > form.card,
   .page-section > section.card {
     align-self: start;
+  }
+
+  .desktop-fixed-panel {
+    display: grid;
+    align-self: start;
+  }
+
+  .desktop-fixed-panel > .card {
+    min-height: 100%;
   }
 
   .choice-grid {
