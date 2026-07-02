@@ -218,7 +218,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
           </div>
           <label className="field">
             <span>金額</span>
-            <input className="input" type="number" value={selectedItem.amount} onChange={(event) => updateSelectedAmount(Number(event.target.value))} />
+            <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={selectedItem.amount} onChange={(event) => updateSelectedAmount(Number(event.target.value))} />
           </label>
           {selectedItem.paymentMethod === "信用卡" && selectedItem.creditCard !== "保費卡" ? (
             <label className="field">
@@ -240,7 +240,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
         <form className="card grid" style={{ boxShadow: "none" }} onSubmit={addSubscription}>
           <h3 style={{ margin: 0 }}>新增個人訂閱</h3>
           <label className="field"><span>訂閱名稱</span><input className="input" value={subscriptionName} onChange={(event) => setSubscriptionName(event.target.value)} placeholder="例如 GPT、動畫瘋" /></label>
-          <label className="field"><span>金額</span><input className="input" type="number" value={subscriptionAmount} onChange={(event) => setSubscriptionAmount(event.target.value)} placeholder="例如 660" /></label>
+          <label className="field"><span>金額</span><input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={subscriptionAmount} onChange={(event) => setSubscriptionAmount(event.target.value)} placeholder="例如 660" /></label>
           <label className="field"><span>信用卡</span><select className="select" value={subscriptionCard} onChange={(event) => setSubscriptionCard(event.target.value as CreditCardName)}>{creditCards.map((card) => <option key={card}>{card}</option>)}</select></label>
           <button className="btn secondary" type="submit">儲存訂閱模板</button>
         </form>

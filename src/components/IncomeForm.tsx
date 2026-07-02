@@ -75,7 +75,7 @@ export function IncomeForm({ viewer, onSaved }: Props) {
       </label>
       <label className="field">
         <span>金額</span>
-        <input className="input" type="number" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="例如 52000" />
+        <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="例如 52000" />
       </label>
       <label className="field">
         <span>備註</span>

@@ -181,7 +181,7 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
       </label>
       <label className="field">
         <span>金額</span>
-        <input className="input" type="number" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="例如 3000" />
+        <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="例如 3000" />
       </label>
       <label className="field">
         <span>類別</span>
@@ -242,11 +242,11 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
             <div className="card grid" style={{ boxShadow: "none" }}>
               <label className="field">
                 <span>分期期數</span>
-                <input className="input" type="number" min="2" inputMode="numeric" value={installmentTotal} onChange={(event) => setInstallmentTotal(event.target.value)} />
+                <input className="input" type="number" min="2" inputMode="numeric" pattern="[0-9]*" step="1" value={installmentTotal} onChange={(event) => setInstallmentTotal(event.target.value)} />
               </label>
               <label className="field">
                 <span>手續費 / 利息總額</span>
-                <input className="input" type="number" min="0" inputMode="decimal" value={installmentFee} onChange={(event) => setInstallmentFee(event.target.value)} placeholder="0 利率就填 0" />
+                <input className="input" type="number" min="0" inputMode="decimal" pattern="[0-9]*" step="1" value={installmentFee} onChange={(event) => setInstallmentFee(event.target.value)} placeholder="0 利率就填 0" />
               </label>
               <label className="field">
                 <span>第一期帳單月份</span>

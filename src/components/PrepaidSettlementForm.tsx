@@ -31,15 +31,15 @@ export function PrepaidSettlementForm() {
       <p className="muted">書記每週告知剩餘金額後，輸入本次餘額，系統會自動反推本週醫院午餐支出。</p>
       <label className="field">
         <span>上次餘額</span>
-        <input className="input" type="number" value={previousBalance} onChange={(event) => setPreviousBalance(Number(event.target.value))} />
+        <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={previousBalance} onChange={(event) => setPreviousBalance(Number(event.target.value))} />
       </label>
       <label className="field">
         <span>本週加值</span>
-        <input className="input" type="number" value={topUpAmount} onChange={(event) => setTopUpAmount(Number(event.target.value))} />
+        <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={topUpAmount} onChange={(event) => setTopUpAmount(Number(event.target.value))} />
       </label>
       <label className="field">
         <span>本次剩餘</span>
-        <input className="input" type="number" value={currentBalance} onChange={(event) => setCurrentBalance(Number(event.target.value))} />
+        <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={currentBalance} onChange={(event) => setCurrentBalance(Number(event.target.value))} />
       </label>
       <div className="row">
         <span>本週醫院午餐</span>
