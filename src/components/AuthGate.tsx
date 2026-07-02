@@ -43,8 +43,8 @@ export function AuthGate({ children }: Props) {
 
   if (isLoading) {
     return (
-      <main className="container grid">
-        <section className="card grid">
+      <main className="auth-screen">
+        <section className="auth-card">
           <h1>一起記</h1>
           <p className="muted">正在確認登入狀態...</p>
         </section>
@@ -54,8 +54,8 @@ export function AuthGate({ children }: Props) {
 
   if (!user) {
     return (
-      <main className="container grid">
-        <section className="card grid">
+      <main className="auth-screen">
+        <section className="auth-card">
           <h1>一起記</h1>
           <p className="muted">登入後即可查看家庭收支與新增紀錄。</p>
           <button className="btn" type="button" onClick={handleSignIn}>使用 Google 登入</button>

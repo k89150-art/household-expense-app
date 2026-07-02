@@ -73,6 +73,36 @@ h2 {
   padding: 14px 14px 0;
 }
 
+.auth-screen {
+  width: min(100%, 430px);
+  min-height: 100vh;
+  display: grid;
+  align-content: start;
+  margin: 0 auto;
+  padding: 18px 14px;
+}
+
+.auth-card {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  border: 1px solid var(--hair);
+  border-radius: 30px;
+  padding: 22px 20px;
+  background: rgba(255, 250, 243, 0.86);
+  box-shadow: 0 14px 30px rgba(60, 43, 32, 0.1);
+}
+
+.auth-card h1 {
+  margin: 0;
+  font-family: ui-serif, "Songti TC", "Noto Serif TC", Georgia, serif;
+  font-size: 32px;
+}
+
+.auth-card p {
+  margin: 0;
+}
+
 .grid {
   display: grid;
   gap: 12px;
