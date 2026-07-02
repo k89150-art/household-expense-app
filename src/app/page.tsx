@@ -5,6 +5,7 @@ import { AdvanceForm } from "@/components/AdvanceForm";
 import { AuthGate, useCurrentUser } from "@/components/AuthGate";
 import { ExpenseQuickForm } from "@/components/ExpenseQuickForm";
 import { FirestoreHomeSummary } from "@/components/FirestoreHomeSummary";
+import { HouseholdReport } from "@/components/HouseholdReport";
 import { IncomeForm } from "@/components/IncomeForm";
 import { InvestmentForm } from "@/components/InvestmentForm";
 import { PrepaidSettlementForm } from "@/components/PrepaidSettlementForm";
@@ -109,17 +110,7 @@ function HouseholdApp() {
       ) : null}
 
       {activeTab === "report" ? (
-        <section className="grid page-section">
-          <article className="panel">
-            <div className="journal-head compact">
-              <div>
-                <h2>報表</h2>
-                <p>查詢不同月份，回看收入、支出、投資與信用卡。</p>
-              </div>
-            </div>
-          </article>
-          <FirestoreHomeSummary viewer={viewer} refreshKey={refreshKey} />
-        </section>
+        <HouseholdReport />
       ) : null}
 
       <button className={isQuickMenuOpen ? "scrim open" : "scrim"} type="button" aria-label="關閉快速新增" onClick={() => setIsQuickMenuOpen(false)} />
