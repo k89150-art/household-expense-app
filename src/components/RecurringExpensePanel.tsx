@@ -47,11 +47,15 @@ function toTarget(owner: Owner, viewer: Viewer): PersonTarget {
 }
 
 function toPaymentMethod(item: RecurringItem): PaymentMethod {
-  return item.paymentMethod === "信用卡" ? "credit_card" : "other";
+  if (item.paymentMethod === "信用卡") return "credit_card";
+  if (item.paymentMethod === "現金") return "cash";
+  if (item.paymentMethod === "轉帳" || item.paymentMethod === "銀行扣款") return "bank_transfer";
+  return "other";
 }
 
 function toExpenseCategory(item: RecurringItem): ExpenseCategory {
-  if (item.name.includes("手機") || item.category.includes("電話") || item.name.includes("網路") || item.category.includes("網路")) return "網路通訊";
+  if (item.name.includes("手機") || item.category.includes("電話")) return "手機門號費";
+  if (item.name.includes("網路") || item.category.includes("網路")) return "網路費";
   if (item.name.includes("保險") || item.category.includes("保險")) return "保險";
   if (item.name.includes("學費") || item.name.includes("延托") || item.category.includes("學費")) return "學費";
   if (item.name.includes("管理費") || item.category.includes("管理費") || item.name.includes("房貸")) return "居家固定費";
@@ -64,22 +68,31 @@ function isSubscriptionItem(item: RecurringItem) {
 
 const DEFAULT_ITEMS: RecurringItem[] = [
   { id: "mortgage", name: "房貸", category: "房貸", amount: 25000, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
-  { id: "mobile-chris", name: "手機門號費：我", category: "網路通訊", amount: 699, target: "self", paymentMethod: "信用卡", creditCard: "玉山", visibleFor: ["chris"] },
-  { id: "mobile-wife", name: "手機門號費：我", category: "網路通訊", amount: 699, target: "self", paymentMethod: "信用卡", creditCard: "台新", visibleFor: ["wife"] },
-  { id: "insurance-self-chris", name: "保險：我", category: "保險", amount: 4200, target: "self", paymentMethod: "信用卡", creditCard: "保費卡", visibleFor: ["chris"] },
+  { id: "mobile-chris", name: "手機門號費", category: "手機門號費", amount: 699, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
+  { id: "mobile-wife", name: "手機門號費", category: "手機門號費", amount: 699, target: "self", paymentMethod: "銀行扣款", visibleFor: ["wife"] },
+  { id: "insurance-self-chris", name: "保險：我", category: "保險", amount: 4200, target: "self", paymentMethod: "信用卡", creditCard: "台新", visibleFor: ["chris"] },
   { id: "insurance-self-wife", name: "保險：我", category: "保險", amount: 3600, target: "self", paymentMethod: "信用卡", creditCard: "保費卡", visibleFor: ["wife"] },
-  { id: "insurance-junyao", name: "保險：竣堯", category: "保險", amount: 1500, target: "junyao", paymentMethod: "信用卡", creditCard: "保費卡", visibleFor: ["chris"] },
+  { id: "insurance-junyao", name: "保險：竣堯", category: "保險", amount: 1500, target: "junyao", paymentMethod: "信用卡", creditCard: "台新", visibleFor: ["chris"] },
   { id: "school-fee", name: "竣堯學費", category: "學費", amount: 12000, target: "junyao", paymentMethod: "轉帳", visibleFor: ["chris", "wife"] },
   { id: "after-school-care", name: "竣堯延托費", category: "學費", amount: 2500, target: "junyao", paymentMethod: "轉帳", visibleFor: ["wife"] },
-  { id: "management-fee", name: "管理費", category: "管理費", amount: 2500, target: "self", paymentMethod: "轉帳", visibleFor: ["chris"] },
-  { id: "internet", name: "網路費", category: "網路通訊", amount: 999, target: "self", paymentMethod: "信用卡", creditCard: "中信", visibleFor: ["chris"] },
+  { id: "management-fee", name: "管理費", category: "管理費", amount: 2500, target: "self", paymentMethod: "現金", visibleFor: ["chris"] },
+  { id: "internet", name: "網路費", category: "網路費", amount: 999, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
 ];
 
 const STORAGE_KEY = "household-expense-recurring-items";
 
 function normalizeRecurringItem(item: RecurringItem): RecurringItem {
-  if (item.id === "mobile-chris" || item.id === "mobile-wife" || item.id === "internet") {
-    return { ...item, category: "網路通訊" };
+  if (item.id === "mobile-chris" || item.id === "mobile-wife") {
+    return { ...item, name: "手機門號費", category: "手機門號費", paymentMethod: "銀行扣款", creditCard: undefined };
+  }
+  if (item.id === "internet") {
+    return { ...item, category: "網路費", paymentMethod: "銀行扣款", creditCard: undefined };
+  }
+  if (item.id === "management-fee") {
+    return { ...item, paymentMethod: "現金", creditCard: undefined };
+  }
+  if (item.id === "insurance-self-chris" || item.id === "insurance-junyao") {
+    return { ...item, category: "保險", paymentMethod: "信用卡", creditCard: "台新" };
   }
   return item;
 }
