@@ -110,7 +110,12 @@ function isInCardStatement(recordDate: string, card: CreditCardName, billMonth: 
 
 function cardStatementLabel(card: CreditCardName, billMonth: string) {
   const { startDate, endDate } = statementRangeForCard(card, billMonth);
-  return `${billMonth} 帳單・${startDate} 到 ${endDate}・${endDate} 結帳`;
+  return `${monthLabel(billMonth)}帳單｜${startDate.slice(5).replace("-", "/")} - ${endDate.slice(5).replace("-", "/")}｜${endDate} 結帳`;
+}
+
+function cardStatementStatusLabel(card: CreditCardName, billMonth: string) {
+  const { endDate } = statementRangeForCard(card, billMonth);
+  return localDateString() < endDate ? "未結帳，金額先預估" : "已結帳，可核對金額";
 }
 
 function legacyInstallmentLine(record: LegacyInstallmentRecord, billMonth: string): CardLine | null {
@@ -572,7 +577,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
 
       <article className="card grid">
         <button className="row" type="button" onClick={() => setShowCreditCards((value) => !value)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
-          <div><h2 style={{ margin: 0 }}>信用卡</h2><div className="muted">本月應繳帳單與本月刷卡核對分開顯示</div></div>
+          <div><h2 style={{ margin: 0 }}>信用卡</h2><div className="muted">依各卡結帳日自動歸到正確帳單月份</div></div>
           <strong>{money(dueCreditCardTotal)}</strong>
         </button>
         {showCreditCards ? <div className="grid">
@@ -656,8 +661,9 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           </div>
 
           <div className="card grid" style={{ boxShadow: "none" }}>
-            <strong>本月應繳帳單（{monthLabel(dueBillMonth)}帳單）</strong>
-            {Object.keys(dueCreditCardGroups).length === 0 ? <p className="muted">沒有上個月信用卡帳單資料</p> : null}
+            <strong>本月預計應繳信用卡（{monthLabel(dueBillMonth)}帳單）</strong>
+            <p className="muted" style={{ margin: 0 }}>刷卡日照實填，系統會依卡別結帳日歸帳；7 號結帳卡會包含 6/8 到 7/7。</p>
+            {Object.keys(dueCreditCardGroups).length === 0 ? <p className="muted">這個繳款月份目前沒有信用卡帳單資料</p> : null}
             {Object.entries(dueCreditCardGroups).map(([card, cardRecords]) => {
               const cardTotal = cardRecords.reduce((sum, record) => sum + record.amount, 0);
               const payment = dueBillPayments.find((item) => item.card === card);
@@ -665,6 +671,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
               return <div className="card grid" style={{ boxShadow: "none" }} key={`due-${card}`}>
                 <div className="row"><strong>{card}</strong><strong>{money(cardTotal)}</strong></div>
                 <div className="muted">{cardStatementLabel(card as CreditCardName, dueBillMonth)}</div>
+                <div className="muted">{cardStatementStatusLabel(card as CreditCardName, dueBillMonth)}</div>
                 <div className="row"><span>狀態</span>{statusBadge(isPaid)}</div>
                 {payment ? <div className="muted">繳款日：{payment.paidDate}・{money(payment.amount)}</div> : null}
                 {!isPaid ? <button className="btn" type="button" onClick={() => handleCreateCardPayment(card, cardTotal, dueBillMonth)}>建立繳款紀錄</button> : null}
@@ -679,13 +686,15 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           </div>
 
           <div className="card grid" style={{ boxShadow: "none" }}>
-            <strong>本月信用卡明細（{monthLabel(selectedMonth)}帳單）</strong>
-            <div className="muted">依各卡結帳區間顯示；國泰 29 號後會進下一個帳單月份。</div>
-            {Object.keys(creditCardGroups).length === 0 ? <p className="muted">這個帳單月份沒有信用卡明細</p> : null}
+            <strong>其他帳單月份預覽（{monthLabel(selectedMonth)}帳單）</strong>
+            <div className="muted">這裡是指定帳單月份的刷卡歸屬預覽，不代表本月一定要繳。</div>
+            {Object.keys(creditCardGroups).length === 0 ? <p className="muted">這個帳單月份目前沒有信用卡明細</p> : null}
             {Object.entries(creditCardGroups).map(([card, cardRecords]) => {
               const cardTotal = cardRecords.reduce((sum, record) => sum + record.amount, 0);
               return <div className="card grid" style={{ boxShadow: "none" }} key={`current-${card}`}>
                 <div className="row"><strong>{card}</strong><strong>{money(cardTotal)}</strong></div>
+                <div className="muted">{cardStatementLabel(card as CreditCardName, selectedMonth)}</div>
+                <div className="muted">{cardStatementStatusLabel(card as CreditCardName, selectedMonth)}</div>
                 {cardRecords.map((record, index) => <div className="row" key={`${card}-${record.date}-${index}`}>
                   <span>{record.date.slice(5)}　{record.label}</span>
                   <span className="muted">{money(record.amount)}{record.kind === "advance" ? "・代墊" : ""}{record.sourceExpense?.installment?.enabled ? "・分期" : ""}</span>
