@@ -95,11 +95,13 @@ export function HouseholdReport() {
     const livingExpense = sum(expenses.filter((record) => record.paymentMethod !== "credit_card"));
     const creditCardExpense = sum(expenses.filter((record) => record.paymentMethod === "credit_card"));
     const advanceTotal = sum(advances);
+    const paidNowAdvance = sum(advances.filter((record) => record.paymentMethod !== "credit_card"));
+    const reimbursedAdvance = sum(advances.filter((record) => record.status === "已收回"));
     const cardPaymentTotal = sum(cardPayments);
     const incomeTotal = sum(incomes);
     const investmentTotal = sum(investments);
-    const totalOutflow = livingExpense + advanceTotal + cardPaymentTotal + investmentTotal;
-    const balance = incomeTotal - totalOutflow;
+    const totalOutflow = livingExpense + paidNowAdvance + cardPaymentTotal + investmentTotal;
+    const cashFlow = incomeTotal - totalOutflow + reimbursedAdvance;
     const categoryLines = toLines(groupTotal(expenses, (record) => record.category));
     const payerLines = toLines(groupTotal(expenses, (record) => record.paidBy === "chris" ? "我付款" : "太太付款"));
     const recentRecords = [...expenses]
@@ -119,8 +121,10 @@ export function HouseholdReport() {
       cardPaymentTotal,
       investmentTotal,
       advanceTotal,
+      paidNowAdvance,
+      reimbursedAdvance,
       totalOutflow,
-      balance,
+      cashFlow,
       categoryLines,
       payerLines,
       recentRecords,
@@ -138,7 +142,7 @@ export function HouseholdReport() {
           <h2>{monthTitle(selectedMonth)}</h2>
           <p>{isLoading ? "正在整理這個月的資料..." : "這裡只放統計與趨勢，首頁保留日常查看。"}</p>
         </div>
-        <strong className={report.balance >= 0 ? "positive" : "negative"}>{money(report.balance)}</strong>
+        <strong className={report.cashFlow >= 0 ? "positive" : "negative"}>{money(report.cashFlow)}</strong>
       </article>
 
       <article className="panel report-controls">
@@ -152,7 +156,7 @@ export function HouseholdReport() {
 
       <section className="report-metrics">
         <article><span>收入</span><strong>{money(report.incomeTotal)}</strong></article>
-        <article><span>總支出</span><strong>{money(report.totalOutflow)}</strong></article>
+        <article><span>本月現金流</span><strong className={report.cashFlow >= 0 ? "positive" : "negative"}>{money(report.cashFlow)}</strong></article>
         <article><span>生活支出</span><strong>{money(report.livingExpense)}</strong></article>
         <article><span>投資</span><strong>{money(report.investmentTotal)}</strong></article>
       </section>
@@ -168,9 +172,10 @@ export function HouseholdReport() {
           <div><span>生活</span><strong>{money(report.livingExpense)}</strong></div>
           <div><span>信用卡繳款</span><strong>{money(report.cardPaymentTotal)}</strong></div>
           <div><span>投資</span><strong>{money(report.investmentTotal)}</strong></div>
-          <div><span>代墊</span><strong>{money(report.advanceTotal)}</strong></div>
+          <div><span>現付代墊</span><strong>{money(report.paidNowAdvance)}</strong></div>
         </div>
-        <p className="muted">本月刷卡尚未繳款：{money(report.creditCardExpense)}</p>
+        <p className="muted">公式：收入 - 現付生活支出 - 現付代墊 - 信用卡繳款 - 投資 + 已收回代墊 = {money(report.cashFlow)}</p>
+        <p className="muted">本月刷卡尚未繳款：{money(report.creditCardExpense)}；已收回代墊：{money(report.reimbursedAdvance)}</p>
       </article>
 
       <article className="panel report-list">

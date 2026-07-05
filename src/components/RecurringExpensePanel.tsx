@@ -243,6 +243,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
     const ok = window.confirm(`確定新增固定支出「${selectedItem.name}」${selectedItem.amount.toLocaleString("zh-TW")} 元嗎？`);
     if (!ok) return;
     const paymentMethod = toPaymentMethod(selectedItem);
+    const category = toExpenseCategory(selectedItem);
     const target = toTarget(selectedItem.target, viewer);
     setIsSaving(true);
     setMessage("");
@@ -250,7 +251,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
       await addExpenseRecord({
         date: expenseDate,
         amount: selectedItem.amount,
-        category: toExpenseCategory(selectedItem),
+        category,
         target,
         paidBy: viewer as OwnerKey,
         paymentMethod,
@@ -259,7 +260,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
         isPrivate: false,
         createdBy: user.uid,
       });
-      setMessage(`已新增固定支出：${selectedItem.name} $${selectedItem.amount.toLocaleString("zh-TW")}`);
+      setMessage(`已新增：${selectedItem.name}｜${category}｜${selectedItem.paymentMethod}${selectedItem.creditCard ? `・${selectedItem.creditCard}` : ""}｜$${selectedItem.amount.toLocaleString("zh-TW")}`);
     } catch (error) {
       console.error(error);
       setMessage("新增失敗，請確認 Firestore rules 或稍後再試。");

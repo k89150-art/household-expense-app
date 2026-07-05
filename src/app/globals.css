@@ -703,6 +703,14 @@ textarea {
   font-size: 22px;
 }
 
+.report-metrics .positive {
+  color: var(--copper-deep);
+}
+
+.report-metrics .negative {
+  color: #9f3f35;
+}
+
 .report-breakdown,
 .report-list {
   display: grid;
