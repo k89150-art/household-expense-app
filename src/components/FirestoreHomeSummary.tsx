@@ -42,6 +42,7 @@ import type {
 import type { Viewer } from "@/lib/household";
 
 type Scope = "month" | "all";
+type CreditCardTab = "due" | "unbilled" | "tools" | "paid";
 type Props = { viewer: Viewer; refreshKey?: number };
 type CardLine = { date: string; label: string; amount: number; kind: "expense" | "advance" | "installment" | "legacyInstallment"; sourceExpense?: ExpenseRecord };
 type CardStatementPolicy = { closingDay: number; closesInFollowingMonth: boolean };
@@ -116,6 +117,11 @@ function cardStatementLabel(card: CreditCardName, billMonth: string) {
 function cardStatementStatusLabel(card: CreditCardName, billMonth: string) {
   const { endDate } = statementRangeForCard(card, billMonth);
   return localDateString() < endDate ? "未結帳，金額先預估" : "已結帳，可核對金額";
+}
+
+function isCardStatementClosed(card: CreditCardName, billMonth: string) {
+  const { endDate } = statementRangeForCard(card, billMonth);
+  return localDateString() >= endDate;
 }
 
 function legacyInstallmentLine(record: LegacyInstallmentRecord, billMonth: string): CardLine | null {
@@ -224,8 +230,18 @@ function groupDueCreditCardBills(billAdvances: AdvanceRecord[], allCardRecords: 
   return groups;
 }
 
-function statusBadge(isPaid: boolean) {
-  return <span style={{ color: isPaid ? "#16803C" : "#C53030", fontWeight: 700 }}>{isPaid ? "已繳款" : "未繳款"}</span>;
+function statusBadge(state: "estimate" | "due" | "paid") {
+  const colors = {
+    estimate: "#8A5B2E",
+    due: "#C53030",
+    paid: "#16803C",
+  };
+  const labels = {
+    estimate: "未結帳預估",
+    due: "已結帳待繳",
+    paid: "已繳款",
+  };
+  return <span style={{ color: colors[state], fontWeight: 800 }}>{labels[state]}</span>;
 }
 
 function getErrorCode(error: unknown) {
@@ -255,6 +271,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [showInvestments, setShowInvestments] = useState(false);
   const [showAdvances, setShowAdvances] = useState(false);
   const [showCreditCards, setShowCreditCards] = useState(false);
+  const [creditCardTab, setCreditCardTab] = useState<CreditCardTab>("due");
   const [manualPaymentCard, setManualPaymentCard] = useState<CreditCardName>("國泰");
   const [manualPaymentBillMonth, setManualPaymentBillMonth] = useState(shiftMonth(currentMonthString(), -1));
   const [manualPaymentDate, setManualPaymentDate] = useState(localDateString());
@@ -475,6 +492,21 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const activeLegacyInstallments = useMemo(() => legacyInstallments.filter((record) => record.isActive), [legacyInstallments]);
   const dueCreditCardGroups = useMemo(() => groupDueCreditCardBills(dueAdvances, allCreditCardExpenses, activeLegacyInstallments, dueBillMonth), [dueAdvances, allCreditCardExpenses, activeLegacyInstallments, dueBillMonth]);
   const dueCreditCardTotal = Object.values(dueCreditCardGroups).flat().reduce((sum, record) => sum + record.amount, 0);
+  const dueCardSummaries = useMemo(() => Object.entries(dueCreditCardGroups).map(([card, cardRecords]) => {
+    const typedCard = card as CreditCardName;
+    const payment = dueBillPayments.find((item) => item.card === typedCard);
+    const isPaid = Boolean(payment);
+    const isClosed = isCardStatementClosed(typedCard, dueBillMonth);
+    return {
+      card: typedCard,
+      cardRecords,
+      cardTotal: cardRecords.reduce((sum, record) => sum + record.amount, 0),
+      payment,
+      state: isPaid ? "paid" as const : isClosed ? "due" as const : "estimate" as const,
+    };
+  }), [dueCreditCardGroups, dueBillPayments, dueBillMonth]);
+  const dueCardCount = dueCardSummaries.filter((item) => item.state === "due").length;
+  const estimatedCardCount = dueCardSummaries.filter((item) => item.state === "estimate").length;
 
   return (
     <section className="home-summary grid">
@@ -577,104 +609,30 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
 
       <article className="card grid">
         <button className="row" type="button" onClick={() => setShowCreditCards((value) => !value)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
-          <div><h2 style={{ margin: 0 }}>信用卡</h2><div className="muted">依各卡結帳日自動歸到正確帳單月份</div></div>
+          <div><h2 style={{ margin: 0 }}>信用卡</h2><div className="muted">{dueCardCount > 0 ? `${dueCardCount} 張待繳` : estimatedCardCount > 0 ? `${estimatedCardCount} 張未結帳預估` : "帳單已整理"}</div></div>
           <strong>{money(dueCreditCardTotal)}</strong>
         </button>
         {showCreditCards ? <div className="grid">
-          <div className="card grid" style={{ boxShadow: "none" }}>
-            <strong>手動新增信用卡繳款</strong>
-            <p className="muted" style={{ margin: 0 }}>第一個月補記舊帳單用；未來有刷卡明細後，優先用下方系統算出的繳款紀錄。</p>
-            <label className="field">
-              <span>信用卡</span>
-              <select className="select" value={manualPaymentCard} onChange={(event) => setManualPaymentCard(event.target.value as CreditCardName)}>
-                {MANUAL_PAYMENT_CARDS.map((card) => <option key={card} value={card}>{card}</option>)}
-              </select>
-            </label>
-            <label className="field">
-              <span>帳單月份</span>
-              <input className="input" type="month" value={manualPaymentBillMonth} onChange={(event) => setManualPaymentBillMonth(event.target.value)} />
-            </label>
-            <label className="field">
-              <span>繳款日期</span>
-              <input className="input" type="date" value={manualPaymentDate} onChange={(event) => setManualPaymentDate(event.target.value)} />
-            </label>
-            <label className="field">
-              <span>繳款金額</span>
-              <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={manualPaymentAmount} onChange={(event) => setManualPaymentAmount(event.target.value)} placeholder="例如 12000" />
-            </label>
-            <label className="field">
-              <span>備註</span>
-              <input className="input" value={manualPaymentNote} onChange={(event) => setManualPaymentNote(event.target.value)} placeholder="例如 6月帳單，開始記帳前" />
-            </label>
-            <button className="btn secondary" type="button" onClick={handleCreateManualCardPayment}>新增手動繳款</button>
+          <div className="scope-toggle">
+            <button className={creditCardTab === "due" ? "btn" : "btn secondary"} type="button" onClick={() => setCreditCardTab("due")}>待繳帳單</button>
+            <button className={creditCardTab === "unbilled" ? "btn" : "btn secondary"} type="button" onClick={() => setCreditCardTab("unbilled")}>未出帳</button>
+            <button className={creditCardTab === "tools" ? "btn" : "btn secondary"} type="button" onClick={() => setCreditCardTab("tools")}>工具</button>
+            <button className={creditCardTab === "paid" ? "btn" : "btn secondary"} type="button" onClick={() => setCreditCardTab("paid")}>已繳</button>
           </div>
 
-          <div className="card grid" style={{ boxShadow: "none" }}>
-            <strong>記帳前分期</strong>
-            <p className="muted" style={{ margin: 0 }}>開始記帳前已刷卡的分期；會進每月應繳信用卡，不會列入生活支出。</p>
-            <label className="field">
-              <span>信用卡</span>
-              <select className="select" value={legacyCard} onChange={(event) => setLegacyCard(event.target.value as CreditCardName)}>
-                {MANUAL_PAYMENT_CARDS.map((card) => <option key={card} value={card}>{card}</option>)}
-              </select>
-            </label>
-            <label className="field">
-              <span>項目</span>
-              <input className="input" value={legacyName} onChange={(event) => setLegacyName(event.target.value)} placeholder="例如 家電、手機、旅遊" />
-            </label>
-            <label className="field">
-              <span>每期金額</span>
-              <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={legacyAmount} onChange={(event) => setLegacyAmount(event.target.value)} placeholder="例如 1200" />
-            </label>
-            <div className="scope-toggle">
-              <label className="field">
-                <span>總期數</span>
-                <input className="input" type="number" min="2" inputMode="numeric" pattern="[0-9]*" step="1" value={legacyTotalInstallments} onChange={(event) => setLegacyTotalInstallments(event.target.value)} />
-              </label>
-              <label className="field">
-                <span>下一期期數</span>
-                <input className="input" type="number" min="1" inputMode="numeric" pattern="[0-9]*" step="1" value={legacyNextInstallmentNo} onChange={(event) => setLegacyNextInstallmentNo(event.target.value)} />
-              </label>
-            </div>
-            <label className="field">
-              <span>下一期帳單月份</span>
-              <input className="input" type="month" value={legacyNextBillMonth} onChange={(event) => setLegacyNextBillMonth(event.target.value)} />
-            </label>
-            <label className="field">
-              <span>備註</span>
-              <input className="input" value={legacyNote} onChange={(event) => setLegacyNote(event.target.value)} placeholder="例如 記帳前刷卡" />
-            </label>
-            <button className="btn secondary" type="button" onClick={handleCreateLegacyInstallment}>新增記帳前分期</button>
-            {activeLegacyInstallments.length > 0 ? <div className="grid">
-              <strong>啟用中的記帳前分期</strong>
-              {activeLegacyInstallments.map((record) => {
-                const dueLine = legacyInstallmentLine(record, dueBillMonth);
-                return <div className="row" key={record.id}>
-                  <span>{record.card}・{record.name}・下一期 {record.nextInstallmentNo}/{record.totalInstallments}・{record.nextBillMonth}</span>
-                  <span className="record-actions">
-                    <span className="muted">{money(record.amount)}{dueLine ? "・本月應繳" : ""}</span>
-                    <button className="btn secondary delete-btn" type="button" onClick={() => handleDeactivateLegacyInstallment(record)}>停用</button>
-                  </span>
-                </div>;
-              })}
-            </div> : null}
-          </div>
-
-          <div className="card grid" style={{ boxShadow: "none" }}>
+          {creditCardTab === "due" ? <div className="card grid" style={{ boxShadow: "none" }}>
             <strong>本月預計應繳信用卡（{monthLabel(dueBillMonth)}帳單）</strong>
             <p className="muted" style={{ margin: 0 }}>刷卡日照實填，系統會依卡別結帳日歸帳；7 號結帳卡會包含 6/8 到 7/7。</p>
-            {Object.keys(dueCreditCardGroups).length === 0 ? <p className="muted">這個繳款月份目前沒有信用卡帳單資料</p> : null}
-            {Object.entries(dueCreditCardGroups).map(([card, cardRecords]) => {
-              const cardTotal = cardRecords.reduce((sum, record) => sum + record.amount, 0);
-              const payment = dueBillPayments.find((item) => item.card === card);
-              const isPaid = Boolean(payment);
+            {dueCardSummaries.length === 0 ? <p className="muted">這個繳款月份目前沒有信用卡帳單資料</p> : null}
+            {dueCardSummaries.map(({ card, cardRecords, cardTotal, payment, state }) => {
               return <div className="card grid" style={{ boxShadow: "none" }} key={`due-${card}`}>
                 <div className="row"><strong>{card}</strong><strong>{money(cardTotal)}</strong></div>
                 <div className="muted">{cardStatementLabel(card as CreditCardName, dueBillMonth)}</div>
                 <div className="muted">{cardStatementStatusLabel(card as CreditCardName, dueBillMonth)}</div>
-                <div className="row"><span>狀態</span>{statusBadge(isPaid)}</div>
+                <div className="row"><span>狀態</span>{statusBadge(state)}</div>
                 {payment ? <div className="muted">繳款日：{payment.paidDate}・{money(payment.amount)}</div> : null}
-                {!isPaid ? <button className="btn" type="button" onClick={() => handleCreateCardPayment(card, cardTotal, dueBillMonth)}>建立繳款紀錄</button> : null}
+                {state === "due" ? <button className="btn" type="button" onClick={() => handleCreateCardPayment(card, cardTotal, dueBillMonth)}>建立繳款紀錄</button> : null}
+                {state === "estimate" ? <button className="btn secondary" type="button" disabled>未結帳，先核對明細</button> : null}
                 {payment ? <button className="btn secondary" type="button" onClick={() => handleDeleteCardPayment(payment.id)}>取消繳款紀錄</button> : null}
                 {cardRecords.map((record, index) => <div className="row" key={`${card}-${record.date}-${index}`}>
                   <span>{record.date.slice(5)}　{record.label}</span>
@@ -683,9 +641,9 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
                 </div>)}
               </div>;
             })}
-          </div>
+          </div> : null}
 
-          <div className="card grid" style={{ boxShadow: "none" }}>
+          {creditCardTab === "unbilled" ? <div className="card grid" style={{ boxShadow: "none" }}>
             <strong>未出帳明細（{monthLabel(selectedMonth)}帳單）</strong>
             <div className="muted">已刷卡但尚未繳款前可先在這裡核對；實際是否出帳依各卡結帳日為準。</div>
             {Object.keys(creditCardGroups).length === 0 ? <p className="muted">目前沒有未出帳信用卡明細</p> : null}
@@ -702,10 +660,92 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
                 </div>)}
               </div>;
             })}
-          </div>
+          </div> : null}
 
-          {cardPayments.length > 0 ? <div className="card grid" style={{ boxShadow: "none" }}>
+          {creditCardTab === "tools" ? <div className="grid">
+            <div className="card grid" style={{ boxShadow: "none" }}>
+              <strong>手動新增信用卡繳款</strong>
+              <p className="muted" style={{ margin: 0 }}>第一個月補記舊帳單用；未來有刷卡明細後，優先用系統算出的繳款紀錄。</p>
+              <label className="field">
+                <span>信用卡</span>
+                <select className="select" value={manualPaymentCard} onChange={(event) => setManualPaymentCard(event.target.value as CreditCardName)}>
+                  {MANUAL_PAYMENT_CARDS.map((card) => <option key={card} value={card}>{card}</option>)}
+                </select>
+              </label>
+              <label className="field">
+                <span>帳單月份</span>
+                <input className="input" type="month" value={manualPaymentBillMonth} onChange={(event) => setManualPaymentBillMonth(event.target.value)} />
+              </label>
+              <label className="field">
+                <span>繳款日期</span>
+                <input className="input" type="date" value={manualPaymentDate} onChange={(event) => setManualPaymentDate(event.target.value)} />
+              </label>
+              <label className="field">
+                <span>繳款金額</span>
+                <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={manualPaymentAmount} onChange={(event) => setManualPaymentAmount(event.target.value)} placeholder="例如 12000" />
+              </label>
+              <label className="field">
+                <span>備註</span>
+                <input className="input" value={manualPaymentNote} onChange={(event) => setManualPaymentNote(event.target.value)} placeholder="例如 6月帳單，開始記帳前" />
+              </label>
+              <button className="btn secondary" type="button" onClick={handleCreateManualCardPayment}>新增手動繳款</button>
+            </div>
+
+            <div className="card grid" style={{ boxShadow: "none" }}>
+              <strong>記帳前分期</strong>
+              <p className="muted" style={{ margin: 0 }}>開始記帳前已刷卡的分期；會進每月應繳信用卡，不會列入生活支出。</p>
+              <label className="field">
+                <span>信用卡</span>
+                <select className="select" value={legacyCard} onChange={(event) => setLegacyCard(event.target.value as CreditCardName)}>
+                  {MANUAL_PAYMENT_CARDS.map((card) => <option key={card} value={card}>{card}</option>)}
+                </select>
+              </label>
+              <label className="field">
+                <span>項目</span>
+                <input className="input" value={legacyName} onChange={(event) => setLegacyName(event.target.value)} placeholder="例如 家電、手機、旅遊" />
+              </label>
+              <label className="field">
+                <span>每期金額</span>
+                <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={legacyAmount} onChange={(event) => setLegacyAmount(event.target.value)} placeholder="例如 1200" />
+              </label>
+              <div className="scope-toggle">
+                <label className="field">
+                  <span>總期數</span>
+                  <input className="input" type="number" min="2" inputMode="numeric" pattern="[0-9]*" step="1" value={legacyTotalInstallments} onChange={(event) => setLegacyTotalInstallments(event.target.value)} />
+                </label>
+                <label className="field">
+                  <span>下一期期數</span>
+                  <input className="input" type="number" min="1" inputMode="numeric" pattern="[0-9]*" step="1" value={legacyNextInstallmentNo} onChange={(event) => setLegacyNextInstallmentNo(event.target.value)} />
+                </label>
+              </div>
+              <label className="field">
+                <span>下一期帳單月份</span>
+                <input className="input" type="month" value={legacyNextBillMonth} onChange={(event) => setLegacyNextBillMonth(event.target.value)} />
+              </label>
+              <label className="field">
+                <span>備註</span>
+                <input className="input" value={legacyNote} onChange={(event) => setLegacyNote(event.target.value)} placeholder="例如 記帳前刷卡" />
+              </label>
+              <button className="btn secondary" type="button" onClick={handleCreateLegacyInstallment}>新增記帳前分期</button>
+              {activeLegacyInstallments.length > 0 ? <div className="grid">
+                <strong>啟用中的記帳前分期</strong>
+                {activeLegacyInstallments.map((record) => {
+                  const dueLine = legacyInstallmentLine(record, dueBillMonth);
+                  return <div className="row" key={record.id}>
+                    <span>{record.card}・{record.name}・下一期 {record.nextInstallmentNo}/{record.totalInstallments}・{record.nextBillMonth}</span>
+                    <span className="record-actions">
+                      <span className="muted">{money(record.amount)}{dueLine ? "・本月應繳" : ""}</span>
+                      <button className="btn secondary delete-btn" type="button" onClick={() => handleDeactivateLegacyInstallment(record)}>停用</button>
+                    </span>
+                  </div>;
+                })}
+              </div> : null}
+            </div>
+          </div> : null}
+
+          {creditCardTab === "paid" ? <div className="card grid" style={{ boxShadow: "none" }}>
             <strong>本月已繳信用卡</strong>
+            {cardPayments.length === 0 ? <p className="muted">這個月份還沒有信用卡繳款紀錄</p> : null}
             {cardPayments.map((payment) => <div className="row" key={payment.id}><span>{payment.date.slice(5)}　{payment.card}・{payment.billMonth}帳單</span><span className="muted">{money(payment.amount)}</span></div>)}
           </div> : null}
         </div> : null}
