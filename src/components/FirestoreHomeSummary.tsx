@@ -49,6 +49,7 @@ const CARD_STATEMENT_POLICIES: Record<CreditCardName, CardStatementPolicy> = {
   台新: { closingDay: 7, closesInFollowingMonth: true },
   保費卡: { closingDay: 7, closesInFollowingMonth: true },
 };
+const MANUAL_PAYMENT_CARDS: CreditCardName[] = ["國泰", "中信", "玉山", "台新"];
 
 const TARGET_LABELS: Record<string, string> = { chris: "我", wife: "我", junyao: "竣堯", cat: "貓" };
 
@@ -229,6 +230,11 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [showInvestments, setShowInvestments] = useState(false);
   const [showAdvances, setShowAdvances] = useState(false);
   const [showCreditCards, setShowCreditCards] = useState(false);
+  const [manualPaymentCard, setManualPaymentCard] = useState<CreditCardName>("國泰");
+  const [manualPaymentBillMonth, setManualPaymentBillMonth] = useState(shiftMonth(currentMonthString(), -1));
+  const [manualPaymentDate, setManualPaymentDate] = useState(localDateString());
+  const [manualPaymentAmount, setManualPaymentAmount] = useState("");
+  const [manualPaymentNote, setManualPaymentNote] = useState("開始記帳前帳單");
   const [message, setMessage] = useState("");
 
   async function loadRecords() {
@@ -324,6 +330,40 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     }
     if (!window.confirm(`確定要建立 ${card} ${billMonth} 帳單繳款 ${money(amount)} 嗎？`)) return;
     await addCardPaymentRecord({ date: localDateString(), amount, owner: viewer, card: card as CreditCardName, billMonth, status: "已繳款", paidDate: localDateString(), note: `${billMonth} ${card}帳單繳款`, createdBy: user.uid });
+    await loadRecords();
+  }
+
+  async function handleCreateManualCardPayment() {
+    const amount = Number(manualPaymentAmount);
+    if (!user) {
+      setMessage("請先登入。");
+      return;
+    }
+    if (!isValidMonth(manualPaymentBillMonth)) {
+      setMessage("帳單月份格式錯誤，請使用 2026-06 這種格式。");
+      return;
+    }
+    if (!manualPaymentDate) {
+      setMessage("請選擇繳款日期。");
+      return;
+    }
+    if (!amount || amount <= 0) {
+      setMessage("請輸入正確的繳款金額。");
+      return;
+    }
+    if (!window.confirm(`建立 ${manualPaymentCard} ${manualPaymentBillMonth} 帳單繳款 ${money(amount)} 嗎？`)) return;
+    await addCardPaymentRecord({
+      date: manualPaymentDate,
+      amount,
+      owner: viewer,
+      card: manualPaymentCard,
+      billMonth: manualPaymentBillMonth,
+      status: "已繳款",
+      paidDate: manualPaymentDate,
+      note: manualPaymentNote.trim() || `${manualPaymentBillMonth} ${manualPaymentCard}帳單繳款`,
+      createdBy: user.uid,
+    });
+    setManualPaymentAmount("");
     await loadRecords();
   }
 
@@ -453,6 +493,34 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           <strong>{money(dueCreditCardTotal)}</strong>
         </button>
         {showCreditCards ? <div className="grid">
+          <div className="card grid" style={{ boxShadow: "none" }}>
+            <strong>手動新增信用卡繳款</strong>
+            <p className="muted" style={{ margin: 0 }}>第一個月補記舊帳單用；未來有刷卡明細後，優先用下方系統算出的繳款紀錄。</p>
+            <label className="field">
+              <span>信用卡</span>
+              <select className="select" value={manualPaymentCard} onChange={(event) => setManualPaymentCard(event.target.value as CreditCardName)}>
+                {MANUAL_PAYMENT_CARDS.map((card) => <option key={card} value={card}>{card}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>帳單月份</span>
+              <input className="input" type="month" value={manualPaymentBillMonth} onChange={(event) => setManualPaymentBillMonth(event.target.value)} />
+            </label>
+            <label className="field">
+              <span>繳款日期</span>
+              <input className="input" type="date" value={manualPaymentDate} onChange={(event) => setManualPaymentDate(event.target.value)} />
+            </label>
+            <label className="field">
+              <span>繳款金額</span>
+              <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={manualPaymentAmount} onChange={(event) => setManualPaymentAmount(event.target.value)} placeholder="例如 12000" />
+            </label>
+            <label className="field">
+              <span>備註</span>
+              <input className="input" value={manualPaymentNote} onChange={(event) => setManualPaymentNote(event.target.value)} placeholder="例如 6月帳單，開始記帳前" />
+            </label>
+            <button className="btn secondary" type="button" onClick={handleCreateManualCardPayment}>新增手動繳款</button>
+          </div>
+
           <div className="card grid" style={{ boxShadow: "none" }}>
             <strong>本月應繳帳單（{monthLabel(dueBillMonth)}帳單）</strong>
             {Object.keys(dueCreditCardGroups).length === 0 ? <p className="muted">沒有上個月信用卡帳單資料</p> : null}
