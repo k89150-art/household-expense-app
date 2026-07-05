@@ -686,9 +686,9 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           </div>
 
           <div className="card grid" style={{ boxShadow: "none" }}>
-            <strong>其他帳單月份預覽（{monthLabel(selectedMonth)}帳單）</strong>
-            <div className="muted">這裡是指定帳單月份的刷卡歸屬預覽，不代表本月一定要繳。</div>
-            {Object.keys(creditCardGroups).length === 0 ? <p className="muted">這個帳單月份目前沒有信用卡明細</p> : null}
+            <strong>未出帳明細（{monthLabel(selectedMonth)}帳單）</strong>
+            <div className="muted">已刷卡但尚未繳款前可先在這裡核對；實際是否出帳依各卡結帳日為準。</div>
+            {Object.keys(creditCardGroups).length === 0 ? <p className="muted">目前沒有未出帳信用卡明細</p> : null}
             {Object.entries(creditCardGroups).map(([card, cardRecords]) => {
               const cardTotal = cardRecords.reduce((sum, record) => sum + record.amount, 0);
               return <div className="card grid" style={{ boxShadow: "none" }} key={`current-${card}`}>
