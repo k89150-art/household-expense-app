@@ -56,6 +56,10 @@ function toExpenseCategory(item: RecurringItem): ExpenseCategory {
   return "其他";
 }
 
+function isSubscriptionItem(item: RecurringItem) {
+  return item.category === "訂閱" || item.name.startsWith("訂閱：");
+}
+
 const DEFAULT_ITEMS: RecurringItem[] = [
   { id: "mortgage", name: "房貸", category: "房貸", amount: 25000, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
   { id: "mobile-chris", name: "手機門號費：我", category: "電話費", amount: 699, target: "self", paymentMethod: "信用卡", creditCard: "玉山", visibleFor: ["chris"] },
@@ -132,6 +136,17 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
   function updateSelectedCreditCard(card: CreditCardName) {
     if (!selectedItem) return;
     setItems((current) => current.map((item) => item.id === selectedItem.id ? { ...item, creditCard: card } : item));
+  }
+
+  function deleteSelectedSubscription() {
+    if (!selectedItem || !isSubscriptionItem(selectedItem)) return;
+    const ok = window.confirm(`確定要刪除「${selectedItem.name}」這個訂閱模板嗎？`);
+    if (!ok) return;
+
+    const remainingVisibleItems = visibleItems.filter((item) => item.id !== selectedItem.id);
+    setItems((current) => current.filter((item) => item.id !== selectedItem.id));
+    setSelectedId(remainingVisibleItems[0]?.id ?? "");
+    setMessage(`已刪除訂閱模板：${selectedItem.name}`);
   }
 
   async function importThisMonth() {
@@ -236,6 +251,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
               </select>
             </label>
           ) : null}
+          {isSubscriptionItem(selectedItem) ? <button className="btn secondary" type="button" onClick={deleteSelectedSubscription}>刪除這個訂閱</button> : null}
           <button className="btn secondary" type="button" onClick={importThisMonth} disabled={isSaving}>{isSaving ? "新增中..." : "新增支出"}</button>
         </article>
       ) : null}

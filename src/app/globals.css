@@ -440,6 +440,7 @@ textarea {
 }
 
 .home-summary {
+  align-items: start;
   gap: 16px;
 }
 
