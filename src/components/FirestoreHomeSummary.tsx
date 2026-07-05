@@ -5,6 +5,7 @@ import { useCurrentUser } from "@/components/AuthGate";
 import { currentMonthString, localDateString } from "@/lib/date";
 import {
   addCardPaymentRecord,
+  addLegacyInstallmentRecord,
   deleteAdvanceRecord,
   deleteCardPaymentRecord,
   deleteExpenseRecord,
@@ -22,8 +23,10 @@ import {
   getExpenseRecordsByMonth,
   getIncomeRecordsByMonth,
   getInvestmentRecordsByMonth,
+  getLegacyInstallmentRecords,
   updateAdvanceRecord,
   updateExpenseRecord,
+  updateLegacyInstallmentRecord,
 } from "@/lib/records";
 import type {
   AdvanceRecord,
@@ -34,12 +37,13 @@ import type {
   InstallmentInfo,
   InstallmentScheduleItem,
   InvestmentRecord,
+  LegacyInstallmentRecord,
 } from "@/lib/records";
 import type { Viewer } from "@/lib/household";
 
 type Scope = "month" | "all";
 type Props = { viewer: Viewer; refreshKey?: number };
-type CardLine = { date: string; label: string; amount: number; kind: "expense" | "advance" | "installment"; sourceExpense?: ExpenseRecord };
+type CardLine = { date: string; label: string; amount: number; kind: "expense" | "advance" | "installment" | "legacyInstallment"; sourceExpense?: ExpenseRecord };
 type CardStatementPolicy = { closingDay: number; closesInFollowingMonth: boolean };
 
 const CARD_STATEMENT_POLICIES: Record<CreditCardName, CardStatementPolicy> = {
@@ -61,6 +65,12 @@ function shiftMonth(yyyymm: string, diff: number) {
   const [year, month] = yyyymm.split("-").map(Number);
   const date = new Date(year, month - 1 + diff, 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthDiff(fromMonth: string, toMonth: string) {
+  const [fromYear, fromMonthNumber] = fromMonth.split("-").map(Number);
+  const [toYear, toMonthNumber] = toMonth.split("-").map(Number);
+  return (toYear - fromYear) * 12 + (toMonthNumber - fromMonthNumber);
 }
 
 function monthLabel(yyyymm: string) {
@@ -101,6 +111,20 @@ function isInCardStatement(recordDate: string, card: CreditCardName, billMonth: 
 function cardStatementLabel(card: CreditCardName, billMonth: string) {
   const { startDate, endDate } = statementRangeForCard(card, billMonth);
   return `${billMonth} 帳單・${startDate} 到 ${endDate}・${endDate} 結帳`;
+}
+
+function legacyInstallmentLine(record: LegacyInstallmentRecord, billMonth: string): CardLine | null {
+  if (!record.isActive) return null;
+  const monthOffset = monthDiff(record.nextBillMonth, billMonth);
+  if (monthOffset < 0) return null;
+  const installmentNo = record.nextInstallmentNo + monthOffset;
+  if (installmentNo > record.totalInstallments) return null;
+  return {
+    date: `${billMonth}-01`,
+    label: `${record.name}・記帳前分期 ${installmentNo}/${record.totalInstallments}${record.note ? `・${record.note}` : ""}`,
+    amount: record.amount,
+    kind: "legacyInstallment",
+  };
 }
 
 function isValidMonth(value: string) {
@@ -168,7 +192,7 @@ function groupByCreditCard(records: ExpenseRecord[], advances: AdvanceRecord[]) 
   return groups;
 }
 
-function groupDueCreditCardBills(billAdvances: AdvanceRecord[], allCardRecords: ExpenseRecord[], billMonth: string) {
+function groupDueCreditCardBills(billAdvances: AdvanceRecord[], allCardRecords: ExpenseRecord[], legacyInstallments: LegacyInstallmentRecord[], billMonth: string) {
   const groups: Record<string, CardLine[]> = {};
 
   allCardRecords.forEach((record) => {
@@ -197,6 +221,12 @@ function groupDueCreditCardBills(billAdvances: AdvanceRecord[], allCardRecords: 
     });
   });
 
+  legacyInstallments.forEach((record) => {
+    const line = legacyInstallmentLine(record, billMonth);
+    if (!line) return;
+    addCardLine(groups, record.card, line);
+  });
+
   return groups;
 }
 
@@ -223,6 +253,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [allCreditCardExpenses, setAllCreditCardExpenses] = useState<ExpenseRecord[]>([]);
   const [cardPayments, setCardPayments] = useState<CardPaymentRecord[]>([]);
   const [dueBillPayments, setDueBillPayments] = useState<CardPaymentRecord[]>([]);
+  const [legacyInstallments, setLegacyInstallments] = useState<LegacyInstallmentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [openedTarget, setOpenedTarget] = useState<string | null>(null);
   const [openedCategory, setOpenedCategory] = useState<string | null>(null);
@@ -235,6 +266,13 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [manualPaymentDate, setManualPaymentDate] = useState(localDateString());
   const [manualPaymentAmount, setManualPaymentAmount] = useState("");
   const [manualPaymentNote, setManualPaymentNote] = useState("開始記帳前帳單");
+  const [legacyCard, setLegacyCard] = useState<CreditCardName>("國泰");
+  const [legacyName, setLegacyName] = useState("");
+  const [legacyAmount, setLegacyAmount] = useState("");
+  const [legacyTotalInstallments, setLegacyTotalInstallments] = useState("12");
+  const [legacyNextInstallmentNo, setLegacyNextInstallmentNo] = useState("1");
+  const [legacyNextBillMonth, setLegacyNextBillMonth] = useState(shiftMonth(currentMonthString(), -1));
+  const [legacyNote, setLegacyNote] = useState("記帳前刷卡");
   const [message, setMessage] = useState("");
 
   async function loadRecords() {
@@ -242,7 +280,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     setMessage("");
     try {
       const dueBillMonth = shiftMonth(selectedMonth, -1);
-      const [expenseData, incomeData, investmentData, advanceData, dueAdvanceData, allCardExpenseData, paymentData, duePaymentData] = await Promise.all([
+      const [expenseData, incomeData, investmentData, advanceData, dueAdvanceData, allCardExpenseData, paymentData, duePaymentData, legacyInstallmentData] = await Promise.all([
         scope === "month" ? getExpenseRecordsByMonth(selectedMonth) : getAllExpenseRecords(),
         scope === "month" ? getIncomeRecordsByMonth(selectedMonth) : getAllIncomeRecords(),
         scope === "month" ? getInvestmentRecordsByMonth(selectedMonth) : getAllInvestmentRecords(),
@@ -251,6 +289,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
         getCreditCardExpenseRecords(),
         scope === "month" ? getCardPaymentRecordsByMonth(selectedMonth) : getAllCardPaymentRecords(),
         getCardPaymentRecordsByBillMonth(dueBillMonth),
+        getLegacyInstallmentRecords(),
       ]);
       setExpenses(expenseData);
       setIncomes(incomeData);
@@ -260,6 +299,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       setAllCreditCardExpenses(allCardExpenseData);
       setCardPayments(paymentData);
       setDueBillPayments(duePaymentData);
+      setLegacyInstallments(legacyInstallmentData);
     } catch (error) {
       console.error(error);
       setMessage(`讀取資料失敗，請稍後再試或確認 Firebase 設定。錯誤：${getErrorCode(error)}`);
@@ -367,6 +407,56 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     await loadRecords();
   }
 
+  async function handleCreateLegacyInstallment() {
+    const amount = Number(legacyAmount);
+    const totalInstallments = Number(legacyTotalInstallments);
+    const nextInstallmentNo = Number(legacyNextInstallmentNo);
+    if (!user) {
+      setMessage("請先登入。");
+      return;
+    }
+    if (!legacyName.trim()) {
+      setMessage("請輸入分期項目名稱。");
+      return;
+    }
+    if (!amount || amount <= 0) {
+      setMessage("請輸入正確的每期金額。");
+      return;
+    }
+    if (!totalInstallments || totalInstallments <= 1) {
+      setMessage("總期數至少要 2 期。");
+      return;
+    }
+    if (!nextInstallmentNo || nextInstallmentNo < 1 || nextInstallmentNo > totalInstallments) {
+      setMessage("下一期期數必須介於 1 到總期數之間。");
+      return;
+    }
+    if (!isValidMonth(legacyNextBillMonth)) {
+      setMessage("下一期帳單月份格式錯誤，請使用 2026-06 這種格式。");
+      return;
+    }
+    await addLegacyInstallmentRecord({
+      name: legacyName.trim(),
+      card: legacyCard,
+      amount,
+      totalInstallments,
+      nextInstallmentNo,
+      nextBillMonth: legacyNextBillMonth,
+      note: legacyNote.trim() || undefined,
+      createdBy: user.uid,
+    });
+    setLegacyName("");
+    setLegacyAmount("");
+    setLegacyNextInstallmentNo(String(Math.min(nextInstallmentNo + 1, totalInstallments)));
+    await loadRecords();
+  }
+
+  async function handleDeactivateLegacyInstallment(record: LegacyInstallmentRecord) {
+    if (!window.confirm(`停用「${record.name}」這筆記帳前分期嗎？`)) return;
+    await updateLegacyInstallmentRecord(record.id, { isActive: false });
+    await loadRecords();
+  }
+
   async function handleDeleteCardPayment(id: string) {
     if (!window.confirm("確定要取消這筆信用卡繳款紀錄嗎？")) return;
     await deleteCardPaymentRecord(id);
@@ -388,7 +478,8 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const groupedIncomes = useMemo(() => groupByOwner(incomes), [incomes]);
   const groupedInvestments = useMemo(() => groupByOwner(investments), [investments]);
   const creditCardGroups = useMemo(() => groupByCreditCard(expenses, advances), [expenses, advances]);
-  const dueCreditCardGroups = useMemo(() => groupDueCreditCardBills(dueAdvances, allCreditCardExpenses, dueBillMonth), [dueAdvances, allCreditCardExpenses, dueBillMonth]);
+  const activeLegacyInstallments = useMemo(() => legacyInstallments.filter((record) => record.isActive), [legacyInstallments]);
+  const dueCreditCardGroups = useMemo(() => groupDueCreditCardBills(dueAdvances, allCreditCardExpenses, activeLegacyInstallments, dueBillMonth), [dueAdvances, allCreditCardExpenses, activeLegacyInstallments, dueBillMonth]);
   const dueCreditCardTotal = Object.values(dueCreditCardGroups).flat().reduce((sum, record) => sum + record.amount, 0);
 
   return (
@@ -522,6 +613,57 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           </div>
 
           <div className="card grid" style={{ boxShadow: "none" }}>
+            <strong>記帳前分期</strong>
+            <p className="muted" style={{ margin: 0 }}>開始記帳前已刷卡的分期；會進每月應繳信用卡，不會列入生活支出。</p>
+            <label className="field">
+              <span>信用卡</span>
+              <select className="select" value={legacyCard} onChange={(event) => setLegacyCard(event.target.value as CreditCardName)}>
+                {MANUAL_PAYMENT_CARDS.map((card) => <option key={card} value={card}>{card}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>項目</span>
+              <input className="input" value={legacyName} onChange={(event) => setLegacyName(event.target.value)} placeholder="例如 家電、手機、旅遊" />
+            </label>
+            <label className="field">
+              <span>每期金額</span>
+              <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={legacyAmount} onChange={(event) => setLegacyAmount(event.target.value)} placeholder="例如 1200" />
+            </label>
+            <div className="scope-toggle">
+              <label className="field">
+                <span>總期數</span>
+                <input className="input" type="number" min="2" inputMode="numeric" pattern="[0-9]*" step="1" value={legacyTotalInstallments} onChange={(event) => setLegacyTotalInstallments(event.target.value)} />
+              </label>
+              <label className="field">
+                <span>下一期期數</span>
+                <input className="input" type="number" min="1" inputMode="numeric" pattern="[0-9]*" step="1" value={legacyNextInstallmentNo} onChange={(event) => setLegacyNextInstallmentNo(event.target.value)} />
+              </label>
+            </div>
+            <label className="field">
+              <span>下一期帳單月份</span>
+              <input className="input" type="month" value={legacyNextBillMonth} onChange={(event) => setLegacyNextBillMonth(event.target.value)} />
+            </label>
+            <label className="field">
+              <span>備註</span>
+              <input className="input" value={legacyNote} onChange={(event) => setLegacyNote(event.target.value)} placeholder="例如 記帳前刷卡" />
+            </label>
+            <button className="btn secondary" type="button" onClick={handleCreateLegacyInstallment}>新增記帳前分期</button>
+            {activeLegacyInstallments.length > 0 ? <div className="grid">
+              <strong>啟用中的記帳前分期</strong>
+              {activeLegacyInstallments.map((record) => {
+                const dueLine = legacyInstallmentLine(record, dueBillMonth);
+                return <div className="row" key={record.id}>
+                  <span>{record.card}・{record.name}・下一期 {record.nextInstallmentNo}/{record.totalInstallments}・{record.nextBillMonth}</span>
+                  <span className="record-actions">
+                    <span className="muted">{money(record.amount)}{dueLine ? "・本月應繳" : ""}</span>
+                    <button className="btn secondary delete-btn" type="button" onClick={() => handleDeactivateLegacyInstallment(record)}>停用</button>
+                  </span>
+                </div>;
+              })}
+            </div> : null}
+          </div>
+
+          <div className="card grid" style={{ boxShadow: "none" }}>
             <strong>本月應繳帳單（{monthLabel(dueBillMonth)}帳單）</strong>
             {Object.keys(dueCreditCardGroups).length === 0 ? <p className="muted">沒有上個月信用卡帳單資料</p> : null}
             {Object.entries(dueCreditCardGroups).map(([card, cardRecords]) => {
@@ -537,7 +679,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
                 {payment ? <button className="btn secondary" type="button" onClick={() => handleDeleteCardPayment(payment.id)}>取消繳款紀錄</button> : null}
                 {cardRecords.map((record, index) => <div className="row" key={`${card}-${record.date}-${index}`}>
                   <span>{record.date.slice(5)}　{record.label}</span>
-                  <span className="muted">{money(record.amount)}{record.kind === "advance" ? "・代墊" : ""}{record.kind === "installment" ? "・分期" : ""}</span>
+                  <span className="muted">{money(record.amount)}{record.kind === "advance" ? "・代墊" : ""}{record.kind === "installment" ? "・分期" : ""}{record.kind === "legacyInstallment" ? "・記帳前分期" : ""}</span>
                   {record.sourceExpense?.installment?.enabled ? <button className="btn secondary" type="button" onClick={() => record.sourceExpense ? handleUpdateInstallmentFirstBillMonth(record.sourceExpense) : undefined}>修改分期月份</button> : null}
                 </div>)}
               </div>;

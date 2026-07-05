@@ -101,6 +101,23 @@ export type CardPaymentRecord = {
   updatedAt?: unknown;
 };
 
+export type LegacyInstallmentRecord = {
+  id: string;
+  householdId: string;
+  kind: "legacyInstallment";
+  name: string;
+  card: CreditCardName;
+  amount: number;
+  totalInstallments: number;
+  nextInstallmentNo: number;
+  nextBillMonth: string;
+  isActive: boolean;
+  note?: string;
+  createdBy: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+};
+
 export type PrivateExpenseDetailRecord = {
   id: string;
   householdId: string;
@@ -116,6 +133,7 @@ export type NewIncomeInput = Omit<IncomeRecord, "id" | "householdId" | "createdA
 export type NewInvestmentInput = Omit<InvestmentRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
 export type NewAdvanceInput = Omit<AdvanceRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
 export type NewCardPaymentInput = Omit<CardPaymentRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
+export type NewLegacyInstallmentInput = Omit<LegacyInstallmentRecord, "id" | "householdId" | "kind" | "isActive" | "createdAt" | "updatedAt">;
 
 type FirestoreWritable = Record<string, string | number | boolean | unknown>;
 
@@ -282,4 +300,21 @@ export async function getCardPaymentRecordsByBillMonth(month: string) {
 export async function deleteCardPaymentRecord(id: string) {
   const docRef = doc(db, "households", HOUSEHOLD_ID, "cardPayments", id);
   await deleteDoc(docRef);
+}
+
+export async function addLegacyInstallmentRecord(input: NewLegacyInstallmentInput) {
+  await addRecord("creditCardBills", { ...input, kind: "legacyInstallment", isActive: true });
+}
+
+export async function getLegacyInstallmentRecords() {
+  const collectionRef = collection(db, "households", HOUSEHOLD_ID, "creditCardBills");
+  const snapshot = await getDocs(query(collectionRef, where("householdId", "==", HOUSEHOLD_ID), where("kind", "==", "legacyInstallment")));
+  return snapshot.docs
+    .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as LegacyInstallmentRecord)
+    .sort((a, b) => a.nextBillMonth.localeCompare(b.nextBillMonth));
+}
+
+export async function updateLegacyInstallmentRecord(id: string, input: Partial<NewLegacyInstallmentInput> & { isActive?: boolean }) {
+  const docRef = doc(db, "households", HOUSEHOLD_ID, "creditCardBills", id);
+  await updateDoc(docRef, removeUndefinedFields({ ...input, updatedAt: serverTimestamp() }));
 }
