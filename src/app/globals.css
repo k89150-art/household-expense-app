@@ -1141,7 +1141,11 @@ textarea {
   }
 
   .choice-grid {
-    grid-template-columns: repeat(5, minmax(96px, 1fr));
+    grid-template-columns: repeat(4, minmax(96px, 1fr));
+  }
+
+  .desktop-hidden-choice {
+    display: none;
   }
 
   .report-page {

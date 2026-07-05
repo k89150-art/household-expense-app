@@ -94,7 +94,7 @@ function HouseholdApp() {
               <button className={addMode === "income" ? "choice active" : "choice"} type="button" onClick={() => setAddMode("income")}>收入</button>
               <button className={addMode === "investment" ? "choice active" : "choice"} type="button" onClick={() => setAddMode("investment")}>投資</button>
               <button className={addMode === "advance" ? "choice active" : "choice"} type="button" onClick={() => setAddMode("advance")}>代墊</button>
-              <button className={addMode === "fixed" ? "choice active" : "choice"} type="button" onClick={openFixed}>固定</button>
+              <button className={addMode === "fixed" ? "choice active desktop-hidden-choice" : "choice desktop-hidden-choice"} type="button" onClick={openFixed}>固定</button>
             </div>
           </div>
           {addMode === "expense" ? <ExpenseQuickForm viewer={viewer} onSaved={refreshRecords} /> : null}
