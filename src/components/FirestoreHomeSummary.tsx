@@ -497,7 +497,10 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           <button className="btn secondary" type="button" onClick={() => setSelectedMonth((value) => shiftMonth(value, 1))}>下個月</button>
         </div>
         <div className="scope-toggle">
-          <button className={scope === "month" ? "btn" : "btn secondary"} type="button" onClick={() => setScope("month")}>當月</button>
+          <button className={scope === "month" ? "btn" : "btn secondary"} type="button" onClick={() => {
+            setSelectedMonth(currentMonthString());
+            setScope("month");
+          }}>當月</button>
           <button className={scope === "all" ? "btn" : "btn secondary"} type="button" onClick={() => setScope("all")}>全部月份</button>
         </div>
       </article>

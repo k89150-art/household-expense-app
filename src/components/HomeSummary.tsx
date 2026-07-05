@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { currentMonthString } from "@/lib/date";
 
 type Viewer = "chris" | "wife";
 type Scope = "month" | "all";
@@ -173,7 +174,10 @@ export function HomeSummary({ viewer }: { viewer: Viewer }) {
           <button className="btn secondary" type="button" onClick={() => setSelectedMonth((value) => shiftMonth(value, 1))}>下個月</button>
         </div>
         <div className="scope-toggle">
-          <button className={scope === "month" ? "btn" : "btn secondary"} type="button" onClick={() => setScope("month")}>當月</button>
+          <button className={scope === "month" ? "btn" : "btn secondary"} type="button" onClick={() => {
+            setSelectedMonth(currentMonthString());
+            setScope("month");
+          }}>當月</button>
           <button className={scope === "all" ? "btn" : "btn secondary"} type="button" onClick={() => setScope("all")}>全部月份</button>
         </div>
       </article>
