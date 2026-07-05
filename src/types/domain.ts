@@ -9,6 +9,7 @@ export type ExpenseCategory =
   | "餐飲"
   | "交通"
   | "生活用品"
+  | "文具"
   | "醫療"
   | "居家固定費"
   | "網路費"
