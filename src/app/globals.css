@@ -356,7 +356,7 @@ h2 {
 
 .choice-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1140,7 +1140,7 @@ textarea {
   }
 
   .choice-grid {
-    grid-template-columns: repeat(4, minmax(120px, 1fr));
+    grid-template-columns: repeat(5, minmax(96px, 1fr));
   }
 
   .report-page {

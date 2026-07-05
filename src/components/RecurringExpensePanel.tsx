@@ -94,6 +94,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
   const visibleItems = useMemo(() => items.filter((item) => item.visibleFor.includes(viewer)), [items, viewer]);
   const creditCards = useMemo(() => getNormalCreditCards(viewer), [viewer]);
   const [selectedId, setSelectedId] = useState("");
+  const [amountDraft, setAmountDraft] = useState("");
   const [expenseDate, setExpenseDate] = useState(today());
   const [showSubscriptionForm, setShowSubscriptionForm] = useState(false);
   const [subscriptionName, setSubscriptionName] = useState("");
@@ -113,11 +114,18 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
   const selectedItem = useMemo(() => visibleItems.find((item) => item.id === selectedId) ?? visibleItems[0], [selectedId, visibleItems]);
 
   useEffect(() => {
-    if (selectedItem) setSelectedId(selectedItem.id);
+    if (selectedItem) {
+      setSelectedId(selectedItem.id);
+      setAmountDraft(String(selectedItem.amount));
+    }
   }, [viewer, selectedItem]);
 
-  function updateSelectedAmount(amount: number) {
+  function updateSelectedAmount(value: string) {
+    setAmountDraft(value);
     if (!selectedItem) return;
+    if (value.trim() === "") return;
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return;
     setItems((current) => current.map((item) => item.id === selectedItem.id ? { ...item, amount } : item));
   }
 
@@ -218,7 +226,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
           </div>
           <label className="field">
             <span>金額</span>
-            <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={selectedItem.amount} onChange={(event) => updateSelectedAmount(Number(event.target.value))} />
+            <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={amountDraft} onChange={(event) => updateSelectedAmount(event.target.value)} />
           </label>
           {selectedItem.paymentMethod === "信用卡" && selectedItem.creditCard !== "保費卡" ? (
             <label className="field">
