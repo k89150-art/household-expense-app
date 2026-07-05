@@ -40,6 +40,15 @@ import type { Viewer } from "@/lib/household";
 type Scope = "month" | "all";
 type Props = { viewer: Viewer; refreshKey?: number };
 type CardLine = { date: string; label: string; amount: number; kind: "expense" | "advance" | "installment"; sourceExpense?: ExpenseRecord };
+type CardStatementPolicy = { closingDay: number; closesInFollowingMonth: boolean };
+
+const CARD_STATEMENT_POLICIES: Record<CreditCardName, CardStatementPolicy> = {
+  國泰: { closingDay: 28, closesInFollowingMonth: false },
+  中信: { closingDay: 7, closesInFollowingMonth: true },
+  玉山: { closingDay: 7, closesInFollowingMonth: true },
+  台新: { closingDay: 7, closesInFollowingMonth: true },
+  保費卡: { closingDay: 7, closesInFollowingMonth: true },
+};
 
 const TARGET_LABELS: Record<string, string> = { chris: "我", wife: "我", junyao: "竣堯", cat: "貓" };
 
@@ -56,6 +65,41 @@ function shiftMonth(yyyymm: string, diff: number) {
 function monthLabel(yyyymm: string) {
   const [year, month] = yyyymm.split("-");
   return `${year} 年 ${Number(month)} 月`;
+}
+
+function dateString(year: number, month: number, day: number) {
+  const date = new Date(year, month - 1, day);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function addDays(yyyyMMdd: string, days: number) {
+  const [year, month, day] = yyyyMMdd.split("-").map(Number);
+  return dateString(year, month, day + days);
+}
+
+function statementDateForCard(card: CreditCardName, billMonth: string) {
+  const policy = CARD_STATEMENT_POLICIES[card] ?? CARD_STATEMENT_POLICIES.中信;
+  const statementMonth = policy.closesInFollowingMonth ? shiftMonth(billMonth, 1) : billMonth;
+  const [year, month] = statementMonth.split("-").map(Number);
+  return dateString(year, month, policy.closingDay);
+}
+
+function statementRangeForCard(card: CreditCardName, billMonth: string) {
+  const previousStatementDate = statementDateForCard(card, shiftMonth(billMonth, -1));
+  return {
+    startDate: addDays(previousStatementDate, 1),
+    endDate: statementDateForCard(card, billMonth),
+  };
+}
+
+function isInCardStatement(recordDate: string, card: CreditCardName, billMonth: string) {
+  const { startDate, endDate } = statementRangeForCard(card, billMonth);
+  return recordDate >= startDate && recordDate <= endDate;
+}
+
+function cardStatementLabel(card: CreditCardName, billMonth: string) {
+  const { startDate, endDate } = statementRangeForCard(card, billMonth);
+  return `${billMonth} 帳單・${startDate} 到 ${endDate}・${endDate} 結帳`;
 }
 
 function isValidMonth(value: string) {
@@ -123,16 +167,18 @@ function groupByCreditCard(records: ExpenseRecord[], advances: AdvanceRecord[]) 
   return groups;
 }
 
-function groupDueCreditCardBills(normalBillRecords: ExpenseRecord[], billAdvances: AdvanceRecord[], allCardRecords: ExpenseRecord[], billMonth: string) {
+function groupDueCreditCardBills(billAdvances: AdvanceRecord[], allCardRecords: ExpenseRecord[], billMonth: string) {
   const groups: Record<string, CardLine[]> = {};
 
-  normalBillRecords.forEach((record) => {
+  allCardRecords.forEach((record) => {
     if (record.paymentMethod !== "credit_card" || !record.creditCard || record.installment?.enabled) return;
+    if (!isInCardStatement(record.date, record.creditCard, billMonth)) return;
     addCardLine(groups, record.creditCard, { date: record.date, label: record.note || record.category, amount: record.amount, kind: "expense", sourceExpense: record });
   });
 
   billAdvances.forEach((record) => {
     if (record.paymentMethod !== "credit_card" || !record.creditCard) return;
+    if (!isInCardStatement(record.date, record.creditCard, billMonth)) return;
     addCardLine(groups, record.creditCard, { date: record.date, label: `代墊・${record.item}`, amount: record.amount, kind: "advance" });
   });
 
@@ -172,7 +218,6 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [incomes, setIncomes] = useState<IncomeRecord[]>([]);
   const [investments, setInvestments] = useState<InvestmentRecord[]>([]);
   const [advances, setAdvances] = useState<AdvanceRecord[]>([]);
-  const [dueExpenses, setDueExpenses] = useState<ExpenseRecord[]>([]);
   const [dueAdvances, setDueAdvances] = useState<AdvanceRecord[]>([]);
   const [allCreditCardExpenses, setAllCreditCardExpenses] = useState<ExpenseRecord[]>([]);
   const [cardPayments, setCardPayments] = useState<CardPaymentRecord[]>([]);
@@ -191,13 +236,12 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     setMessage("");
     try {
       const dueBillMonth = shiftMonth(selectedMonth, -1);
-      const [expenseData, incomeData, investmentData, advanceData, dueExpenseData, dueAdvanceData, allCardExpenseData, paymentData, duePaymentData] = await Promise.all([
+      const [expenseData, incomeData, investmentData, advanceData, dueAdvanceData, allCardExpenseData, paymentData, duePaymentData] = await Promise.all([
         scope === "month" ? getExpenseRecordsByMonth(selectedMonth) : getAllExpenseRecords(),
         scope === "month" ? getIncomeRecordsByMonth(selectedMonth) : getAllIncomeRecords(),
         scope === "month" ? getInvestmentRecordsByMonth(selectedMonth) : getAllInvestmentRecords(),
         scope === "month" ? getAdvanceRecordsByMonth(selectedMonth) : getAllAdvanceRecords(),
-        getExpenseRecordsByMonth(dueBillMonth),
-        getAdvanceRecordsByMonth(dueBillMonth),
+        getAllAdvanceRecords(),
         getCreditCardExpenseRecords(),
         scope === "month" ? getCardPaymentRecordsByMonth(selectedMonth) : getAllCardPaymentRecords(),
         getCardPaymentRecordsByBillMonth(dueBillMonth),
@@ -206,7 +250,6 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       setIncomes(incomeData);
       setInvestments(investmentData);
       setAdvances(advanceData);
-      setDueExpenses(dueExpenseData);
       setDueAdvances(dueAdvanceData);
       setAllCreditCardExpenses(allCardExpenseData);
       setCardPayments(paymentData);
@@ -305,7 +348,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const groupedIncomes = useMemo(() => groupByOwner(incomes), [incomes]);
   const groupedInvestments = useMemo(() => groupByOwner(investments), [investments]);
   const creditCardGroups = useMemo(() => groupByCreditCard(expenses, advances), [expenses, advances]);
-  const dueCreditCardGroups = useMemo(() => groupDueCreditCardBills(dueExpenses, dueAdvances, allCreditCardExpenses, dueBillMonth), [dueExpenses, dueAdvances, allCreditCardExpenses, dueBillMonth]);
+  const dueCreditCardGroups = useMemo(() => groupDueCreditCardBills(dueAdvances, allCreditCardExpenses, dueBillMonth), [dueAdvances, allCreditCardExpenses, dueBillMonth]);
   const dueCreditCardTotal = Object.values(dueCreditCardGroups).flat().reduce((sum, record) => sum + record.amount, 0);
 
   return (
@@ -419,6 +462,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
               const isPaid = Boolean(payment);
               return <div className="card grid" style={{ boxShadow: "none" }} key={`due-${card}`}>
                 <div className="row"><strong>{card}</strong><strong>{money(cardTotal)}</strong></div>
+                <div className="muted">{cardStatementLabel(card as CreditCardName, dueBillMonth)}</div>
                 <div className="row"><span>狀態</span>{statusBadge(isPaid)}</div>
                 {payment ? <div className="muted">繳款日：{payment.paidDate}・{money(payment.amount)}</div> : null}
                 {!isPaid ? <button className="btn" type="button" onClick={() => handleCreateCardPayment(card, cardTotal, dueBillMonth)}>建立繳款紀錄</button> : null}
