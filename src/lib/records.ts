@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc, where, writeBatch } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { HOUSEHOLD_ID } from "@/lib/household";
 import { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
@@ -118,6 +118,24 @@ export type LegacyInstallmentRecord = {
   updatedAt?: unknown;
 };
 
+export type RecurringTemplateTarget = "self" | "spouse" | "junyao" | "cat";
+export type RecurringTemplatePaymentMethod = "現金" | "信用卡" | "其他" | "轉帳" | "銀行扣款";
+
+export type RecurringExpenseTemplateRecord = {
+  id: string;
+  householdId: string;
+  name: string;
+  category: string;
+  amount: number;
+  target: RecurringTemplateTarget;
+  paymentMethod: RecurringTemplatePaymentMethod;
+  creditCard?: CreditCardName;
+  visibleFor: OwnerKey[];
+  createdBy: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+};
+
 export type PrivateExpenseDetailRecord = {
   id: string;
   householdId: string;
@@ -134,6 +152,7 @@ export type NewInvestmentInput = Omit<InvestmentRecord, "id" | "householdId" | "
 export type NewAdvanceInput = Omit<AdvanceRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
 export type NewCardPaymentInput = Omit<CardPaymentRecord, "id" | "householdId" | "createdAt" | "updatedAt">;
 export type NewLegacyInstallmentInput = Omit<LegacyInstallmentRecord, "id" | "householdId" | "kind" | "isActive" | "createdAt" | "updatedAt">;
+export type NewRecurringExpenseTemplateInput = Omit<RecurringExpenseTemplateRecord, "householdId" | "createdAt" | "updatedAt">;
 
 type FirestoreWritable = Record<string, string | number | boolean | unknown>;
 
@@ -317,4 +336,23 @@ export async function getLegacyInstallmentRecords() {
 export async function updateLegacyInstallmentRecord(id: string, input: Partial<NewLegacyInstallmentInput> & { isActive?: boolean }) {
   const docRef = doc(db, "households", HOUSEHOLD_ID, "creditCardBills", id);
   await updateDoc(docRef, removeUndefinedFields({ ...input, updatedAt: serverTimestamp() }));
+}
+
+export async function getRecurringExpenseTemplates() {
+  const collectionRef = collection(db, "households", HOUSEHOLD_ID, "recurringExpenses");
+  const snapshot = await getDocs(query(collectionRef, where("householdId", "==", HOUSEHOLD_ID)));
+  return snapshot.docs
+    .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as RecurringExpenseTemplateRecord)
+    .sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
+}
+
+export async function upsertRecurringExpenseTemplate(input: NewRecurringExpenseTemplateInput) {
+  const { id, ...template } = input;
+  const docRef = doc(db, "households", HOUSEHOLD_ID, "recurringExpenses", id);
+  await setDoc(docRef, recordData(template), { merge: true });
+}
+
+export async function deleteRecurringExpenseTemplate(id: string) {
+  const docRef = doc(db, "households", HOUSEHOLD_ID, "recurringExpenses", id);
+  await deleteDoc(docRef);
 }

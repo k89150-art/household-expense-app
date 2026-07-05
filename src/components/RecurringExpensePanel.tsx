@@ -2,23 +2,14 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
-import { addExpenseRecord } from "@/lib/records";
-import type { CreditCardName, OwnerKey } from "@/lib/records";
+import { addExpenseRecord, deleteRecurringExpenseTemplate, getRecurringExpenseTemplates, upsertRecurringExpenseTemplate } from "@/lib/records";
+import type { CreditCardName, OwnerKey, RecurringExpenseTemplateRecord } from "@/lib/records";
 import type { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
 
 type Viewer = "chris" | "wife";
 type Owner = "self" | "spouse" | "junyao" | "cat";
 
-type RecurringItem = {
-  id: string;
-  name: string;
-  category: string;
-  amount: number;
-  target: Owner;
-  paymentMethod: "現金" | "信用卡" | "其他" | "轉帳" | "銀行扣款";
-  creditCard?: CreditCardName;
-  visibleFor: Viewer[];
-};
+type RecurringItem = Omit<RecurringExpenseTemplateRecord, "householdId" | "createdBy" | "createdAt" | "updatedAt">;
 
 function today() {
   const now = new Date();
@@ -115,6 +106,22 @@ function loadStoredItems() {
   }
 }
 
+function templateSnapshot(item: RecurringItem) {
+  return {
+    name: item.name,
+    category: item.category,
+    amount: item.amount,
+    target: item.target,
+    paymentMethod: item.paymentMethod,
+    creditCard: item.creditCard,
+    visibleFor: item.visibleFor,
+  };
+}
+
+async function saveTemplateToCloud(item: RecurringItem, userId: string) {
+  await upsertRecurringExpenseTemplate({ ...item, createdBy: userId });
+}
+
 export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
   const user = useCurrentUser();
   const [items, setItems] = useState<RecurringItem[]>(loadStoredItems);
@@ -128,6 +135,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
   const [subscriptionAmount, setSubscriptionAmount] = useState("");
   const [subscriptionCard, setSubscriptionCard] = useState<CreditCardName>(creditCards[0]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isTemplateLoading, setIsTemplateLoading] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -138,6 +146,46 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
     setSubscriptionCard(creditCards[0]);
   }, [creditCards]);
 
+  useEffect(() => {
+    if (!user) return;
+
+    let isMounted = true;
+    const userId = user.uid;
+
+    async function loadCloudTemplates() {
+      setIsTemplateLoading(true);
+      try {
+        const cloudItems = await getRecurringExpenseTemplates();
+        const normalizedCloudItems = cloudItems.map(normalizeRecurringItem);
+        const seedItems = normalizedCloudItems.length > 0 ? mergeDefaultItems(normalizedCloudItems) : mergeDefaultItems(loadStoredItems());
+        const cloudById = new Map(normalizedCloudItems.map((item) => [item.id, item]));
+        const templatesToSave = normalizedCloudItems.length === 0
+          ? seedItems
+          : seedItems.filter((item) => {
+            const cloudItem = cloudById.get(item.id);
+            return !cloudItem || JSON.stringify(templateSnapshot(cloudItem)) !== JSON.stringify(templateSnapshot(item));
+          });
+
+        await Promise.all(templatesToSave.map((item) => saveTemplateToCloud(item, userId)));
+        if (isMounted) {
+          setItems(seedItems);
+          setMessage(normalizedCloudItems.length > 0 ? "" : "固定支出模板已同步到雲端。");
+        }
+      } catch (error) {
+        console.error(error);
+        if (isMounted) setMessage("固定支出雲端同步失敗，暫時使用本機模板。");
+      } finally {
+        if (isMounted) setIsTemplateLoading(false);
+      }
+    }
+
+    loadCloudTemplates();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
+
   const selectedItem = useMemo(() => visibleItems.find((item) => item.id === selectedId) ?? visibleItems[0], [selectedId, visibleItems]);
 
   useEffect(() => {
@@ -147,21 +195,25 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
     }
   }, [viewer, selectedItem]);
 
-  function updateSelectedAmount(value: string) {
+  async function updateSelectedAmount(value: string) {
     setAmountDraft(value);
     if (!selectedItem) return;
     if (value.trim() === "") return;
     const amount = Number(value);
     if (!Number.isFinite(amount)) return;
-    setItems((current) => current.map((item) => item.id === selectedItem.id ? { ...item, amount } : item));
+    const updatedItem = { ...selectedItem, amount };
+    setItems((current) => current.map((item) => item.id === selectedItem.id ? updatedItem : item));
+    if (user) await saveTemplateToCloud(updatedItem, user.uid);
   }
 
-  function updateSelectedCreditCard(card: CreditCardName) {
+  async function updateSelectedCreditCard(card: CreditCardName) {
     if (!selectedItem) return;
-    setItems((current) => current.map((item) => item.id === selectedItem.id ? { ...item, creditCard: card } : item));
+    const updatedItem = { ...selectedItem, creditCard: card };
+    setItems((current) => current.map((item) => item.id === selectedItem.id ? updatedItem : item));
+    if (user) await saveTemplateToCloud(updatedItem, user.uid);
   }
 
-  function deleteSelectedSubscription() {
+  async function deleteSelectedSubscription() {
     if (!selectedItem || !isSubscriptionItem(selectedItem)) return;
     const ok = window.confirm(`確定要刪除「${selectedItem.name}」這個訂閱模板嗎？`);
     if (!ok) return;
@@ -169,7 +221,13 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
     const remainingVisibleItems = visibleItems.filter((item) => item.id !== selectedItem.id);
     setItems((current) => current.filter((item) => item.id !== selectedItem.id));
     setSelectedId(remainingVisibleItems[0]?.id ?? "");
-    setMessage(`已刪除訂閱模板：${selectedItem.name}`);
+    try {
+      if (user) await deleteRecurringExpenseTemplate(selectedItem.id);
+      setMessage(`已刪除訂閱模板：${selectedItem.name}`);
+    } catch (error) {
+      console.error(error);
+      setMessage("刪除雲端訂閱模板失敗，請稍後再試。");
+    }
   }
 
   async function importThisMonth() {
@@ -210,11 +268,15 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
     }
   }
 
-  function addSubscription(event: FormEvent<HTMLFormElement>) {
+  async function addSubscription(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const amount = Number(subscriptionAmount);
     if (!subscriptionName.trim() || !amount || amount <= 0) {
       setMessage("請輸入訂閱名稱與正確金額。");
+      return;
+    }
+    if (!user) {
+      setMessage("請先登入。");
       return;
     }
     const item: RecurringItem = {
@@ -227,19 +289,26 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
       creditCard: subscriptionCard,
       visibleFor: [viewer],
     };
-    setItems((current) => [...current, item]);
-    setSelectedId(item.id);
-    setSubscriptionName("");
-    setSubscriptionAmount("");
-    setSubscriptionCard(creditCards[0]);
-    setShowSubscriptionForm(false);
-    setMessage(`已新增訂閱模板：${item.name}`);
+    try {
+      await saveTemplateToCloud(item, user.uid);
+      setItems((current) => [...current, item]);
+      setSelectedId(item.id);
+      setSubscriptionName("");
+      setSubscriptionAmount("");
+      setSubscriptionCard(creditCards[0]);
+      setShowSubscriptionForm(false);
+      setMessage(`已新增訂閱模板：${item.name}`);
+    } catch (error) {
+      console.error(error);
+      setMessage("新增雲端訂閱模板失敗，請稍後再試。");
+    }
   }
 
   return (
     <section className="card grid">
       <h2>固定支出</h2>
       <p className="muted" style={{ margin: 0 }}>選擇固定支出後按「新增支出」，會正式寫入本月帳本。</p>
+      {isTemplateLoading ? <p className="muted" style={{ margin: 0 }}>正在同步固定支出模板...</p> : null}
 
       <label className="field">
         <span>支出日期</span>
