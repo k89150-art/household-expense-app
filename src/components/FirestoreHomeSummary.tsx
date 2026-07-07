@@ -285,7 +285,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [showInvestments, setShowInvestments] = useState(false);
   const [showAdvances, setShowAdvances] = useState(false);
   const [showCreditCards, setShowCreditCards] = useState(false);
-  const [creditCardTab, setCreditCardTab] = useState<CreditCardTab>("due");
+  const [creditCardTab, setCreditCardTab] = useState<CreditCardTab>("unbilled");
   const [openedCardDetails, setOpenedCardDetails] = useState<Record<string, boolean>>({});
   const [manualPaymentCard, setManualPaymentCard] = useState<CreditCardName>("國泰");
   const [manualPaymentBillMonth, setManualPaymentBillMonth] = useState(shiftMonth(currentMonthString(), -1));
@@ -638,8 +638,8 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
         </button>
         {showCreditCards ? <div className="grid">
           <div className="scope-toggle">
-            <button className={creditCardTab === "due" ? "btn" : "btn secondary"} type="button" onClick={() => setCreditCardTab("due")}>待繳帳單</button>
             <button className={creditCardTab === "unbilled" ? "btn" : "btn secondary"} type="button" onClick={() => setCreditCardTab("unbilled")}>未出帳</button>
+            <button className={creditCardTab === "due" ? "btn" : "btn secondary"} type="button" onClick={() => setCreditCardTab("due")}>待繳帳單</button>
             <button className={creditCardTab === "tools" ? "btn" : "btn secondary"} type="button" onClick={() => setCreditCardTab("tools")}>工具</button>
             <button className={creditCardTab === "paid" ? "btn" : "btn secondary"} type="button" onClick={() => setCreditCardTab("paid")}>已繳</button>
           </div>
