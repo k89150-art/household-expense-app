@@ -145,6 +145,23 @@ function legacyInstallmentLine(record: LegacyInstallmentRecord, billMonth: strin
   };
 }
 
+function legacyInstallmentDisplay(record: LegacyInstallmentRecord, billMonth: string) {
+  const monthOffset = monthDiff(record.nextBillMonth, billMonth);
+  if (monthOffset >= 0) {
+    const installmentNo = record.nextInstallmentNo + monthOffset;
+    if (installmentNo <= record.totalInstallments) {
+      return {
+        label: `本月應繳 ${installmentNo}/${record.totalInstallments}・${billMonth}`,
+        isDue: true,
+      };
+    }
+  }
+  return {
+    label: `下一期 ${record.nextInstallmentNo}/${record.totalInstallments}・${record.nextBillMonth}`,
+    isDue: false,
+  };
+}
+
 function nextLegacyInstallmentState(record: LegacyInstallmentRecord, paidBillMonth: string) {
   const monthOffset = monthDiff(record.nextBillMonth, paidBillMonth);
   const paidInstallmentNo = record.nextInstallmentNo + Math.max(0, monthOffset);
@@ -731,10 +748,10 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
               <strong>啟用中的記帳前分期</strong>
               <p className="muted" style={{ margin: 0 }}>這些會自動併入對應月份的待繳帳單。</p>
               {activeLegacyInstallments.map((record) => {
-                const dueLine = legacyInstallmentLine(record, dueBillMonth);
+                const display = legacyInstallmentDisplay(record, dueBillMonth);
                 return <div className="record-row" key={record.id}>
-                  <span className="record-title">{record.card}・{record.name}・下一期 {record.nextInstallmentNo}/{record.totalInstallments}・{record.nextBillMonth}</span>
-                  <span className="muted">{money(record.amount)}{dueLine ? "・本月應繳" : ""}</span>
+                  <span className="record-title">{record.card}・{record.name}・{display.label}</span>
+                  <span className="muted">{money(record.amount)}{display.isDue ? "・本月應繳" : ""}</span>
                 </div>;
               })}
             </div> : null}
@@ -842,11 +859,11 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
               {activeLegacyInstallments.length > 0 ? <div className="grid">
                 <strong>啟用中的記帳前分期</strong>
                 {activeLegacyInstallments.map((record) => {
-                  const dueLine = legacyInstallmentLine(record, dueBillMonth);
+                  const display = legacyInstallmentDisplay(record, dueBillMonth);
                   return <div className="row" key={record.id}>
-                    <span>{record.card}・{record.name}・下一期 {record.nextInstallmentNo}/{record.totalInstallments}・{record.nextBillMonth}</span>
+                    <span>{record.card}・{record.name}・{display.label}</span>
                     <span className="record-actions">
-                      <span className="muted">{money(record.amount)}{dueLine ? "・本月應繳" : ""}</span>
+                      <span className="muted">{money(record.amount)}{display.isDue ? "・本月應繳" : ""}</span>
                       <button className="btn secondary delete-btn" type="button" onClick={() => handleDeactivateLegacyInstallment(record)}>停用</button>
                     </span>
                   </div>;
