@@ -406,6 +406,12 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     const paymentAmount = amount + fee;
     const feeText = fee > 0 ? `（含他行扣款手續費 ${money(fee)}）` : "";
     if (!window.confirm(`確定要建立 ${card} ${billMonth} 帳單繳款 ${money(paymentAmount)} ${feeText}嗎？`)) return;
+    const dueLegacyInstallments = legacyInstallments.filter((record) =>
+      record.isActive &&
+      (record.owner ?? "chris") === viewer &&
+      record.card === typedCard &&
+      legacyInstallmentLine(record, billMonth)
+    );
     await addCardPaymentRecord({
       date: localDateString(),
       amount: paymentAmount,
@@ -417,6 +423,15 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       note: `${billMonth} ${card}帳單繳款${fee > 0 ? `，含他行扣款手續費 ${fee} 元` : ""}`,
       createdBy: user.uid,
     });
+    await Promise.all(dueLegacyInstallments.map((record) => {
+      const isLastInstallment = record.nextInstallmentNo >= record.totalInstallments;
+      return updateLegacyInstallmentRecord(record.id, isLastInstallment
+        ? { isActive: false }
+        : {
+          nextInstallmentNo: record.nextInstallmentNo + 1,
+          nextBillMonth: shiftMonth(record.nextBillMonth, 1),
+        });
+    }));
     await loadRecords();
   }
 
