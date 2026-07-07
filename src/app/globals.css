@@ -439,6 +439,10 @@ textarea {
   gap: 10px;
 }
 
+.scope-toggle.three-tabs {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
 .home-summary {
   align-items: start;
   gap: 16px;

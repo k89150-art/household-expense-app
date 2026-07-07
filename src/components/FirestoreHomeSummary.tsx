@@ -55,11 +55,18 @@ const CARD_STATEMENT_POLICIES: Record<CreditCardName, CardStatementPolicy> = {
   保費卡: { closingDay: 7, closesInFollowingMonth: true },
 };
 const MANUAL_PAYMENT_CARDS: CreditCardName[] = ["國泰", "中信", "玉山", "台新"];
+const CARD_PAYMENT_FEES: Partial<Record<CreditCardName, number>> = {
+  中信: 10,
+};
 
 const TARGET_LABELS: Record<string, string> = { chris: "我", wife: "我", junyao: "竣堯", cat: "貓" };
 
 function money(value = 0) {
   return `$${value.toLocaleString("zh-TW")}`;
+}
+
+function cardPaymentFee(card: CreditCardName) {
+  return CARD_PAYMENT_FEES[card] ?? 0;
 }
 
 function shiftMonth(yyyymm: string, diff: number) {
@@ -394,8 +401,22 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       setMessage("請先登入。");
       return;
     }
-    if (!window.confirm(`確定要建立 ${card} ${billMonth} 帳單繳款 ${money(amount)} 嗎？`)) return;
-    await addCardPaymentRecord({ date: localDateString(), amount, owner: viewer, card: card as CreditCardName, billMonth, status: "已繳款", paidDate: localDateString(), note: `${billMonth} ${card}帳單繳款`, createdBy: user.uid });
+    const typedCard = card as CreditCardName;
+    const fee = cardPaymentFee(typedCard);
+    const paymentAmount = amount + fee;
+    const feeText = fee > 0 ? `（含他行扣款手續費 ${money(fee)}）` : "";
+    if (!window.confirm(`確定要建立 ${card} ${billMonth} 帳單繳款 ${money(paymentAmount)} ${feeText}嗎？`)) return;
+    await addCardPaymentRecord({
+      date: localDateString(),
+      amount: paymentAmount,
+      owner: viewer,
+      card: typedCard,
+      billMonth,
+      status: "已繳款",
+      paidDate: localDateString(),
+      note: `${billMonth} ${card}帳單繳款${fee > 0 ? `，含他行扣款手續費 ${fee} 元` : ""}`,
+      createdBy: user.uid,
+    });
     await loadRecords();
   }
 
@@ -515,7 +536,10 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const creditCardGroups = useMemo(() => groupDueCreditCardBills(ownDueAdvances, ownCreditCardExpenses, [], selectedMonth), [ownDueAdvances, ownCreditCardExpenses, selectedMonth]);
   const activeLegacyInstallments = useMemo(() => legacyInstallments.filter((record) => record.isActive && (record.owner ?? "chris") === viewer), [legacyInstallments, viewer]);
   const dueCreditCardGroups = useMemo(() => groupDueCreditCardBills(ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, dueBillMonth), [ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, dueBillMonth]);
-  const dueCreditCardTotal = Object.values(dueCreditCardGroups).flat().reduce((sum, record) => sum + record.amount, 0);
+  const dueCreditCardTotal = Object.entries(dueCreditCardGroups).reduce((sum, [card, records]) => {
+    const cardTotal = records.reduce((cardSum, record) => cardSum + record.amount, 0);
+    return sum + cardTotal + cardPaymentFee(card as CreditCardName);
+  }, 0);
   const dueCardSummaries = useMemo(() => Object.entries(dueCreditCardGroups).map(([card, cardRecords]) => {
     const typedCard = card as CreditCardName;
     const payment = ownDueBillPayments.find((item) => item.card === typedCard);
@@ -637,10 +661,9 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           <strong>{money(dueCreditCardTotal)}</strong>
         </button>
         {showCreditCards ? <div className="grid">
-          <div className="scope-toggle">
+          <div className="scope-toggle three-tabs">
             <button className={creditCardTab === "unbilled" ? "btn" : "btn secondary"} type="button" onClick={() => setCreditCardTab("unbilled")}>未出帳</button>
             <button className={creditCardTab === "due" ? "btn" : "btn secondary"} type="button" onClick={() => setCreditCardTab("due")}>待繳帳單</button>
-            <button className={creditCardTab === "tools" ? "btn" : "btn secondary"} type="button" onClick={() => setCreditCardTab("tools")}>工具</button>
             <button className={creditCardTab === "paid" ? "btn" : "btn secondary"} type="button" onClick={() => setCreditCardTab("paid")}>已繳</button>
           </div>
 
@@ -651,16 +674,19 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
             {dueCardSummaries.map(({ card, cardRecords, cardTotal, payment, state }) => {
               const detailKey = `due-${card}`;
               const isOpen = Boolean(openedCardDetails[detailKey]);
+              const paymentFee = cardPaymentFee(card);
+              const payableTotal = cardTotal + paymentFee;
               return <div className="card credit-card-summary grid" style={{ boxShadow: "none" }} key={detailKey}>
                 <div className="row">
                   <div><strong>{card}</strong><div className="muted">{cardRecords.length} 筆明細</div></div>
-                  <strong>{money(cardTotal)}</strong>
+                  <strong>{money(payableTotal)}</strong>
                 </div>
                 <div className="credit-card-meta">
                   <span>{cardStatementLabel(card as CreditCardName, dueBillMonth)}</span>
                   <span>{cardStatementStatusLabel(card as CreditCardName, dueBillMonth)}</span>
                   {statusBadge(state)}
                 </div>
+                {paymentFee > 0 ? <div className="muted">刷卡合計 {money(cardTotal)}，他行扣款手續費 {money(paymentFee)}</div> : null}
                 {payment ? <div className="muted">繳款日：{payment.paidDate}・{money(payment.amount)}</div> : null}
                 {state === "due" ? <button className="btn" type="button" onClick={() => handleCreateCardPayment(card, cardTotal, dueBillMonth)}>建立繳款紀錄</button> : null}
                 {state === "estimate" ? <button className="btn secondary" type="button" disabled>未結帳，先核對明細</button> : null}
@@ -680,6 +706,17 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
                 </div> : null}
               </div>;
             })}
+            {activeLegacyInstallments.length > 0 ? <div className="card grid" style={{ boxShadow: "none" }}>
+              <strong>啟用中的記帳前分期</strong>
+              <p className="muted" style={{ margin: 0 }}>這些會自動併入對應月份的待繳帳單。</p>
+              {activeLegacyInstallments.map((record) => {
+                const dueLine = legacyInstallmentLine(record, dueBillMonth);
+                return <div className="record-row" key={record.id}>
+                  <span className="record-title">{record.card}・{record.name}・下一期 {record.nextInstallmentNo}/{record.totalInstallments}・{record.nextBillMonth}</span>
+                  <span className="muted">{money(record.amount)}{dueLine ? "・本月應繳" : ""}</span>
+                </div>;
+              })}
+            </div> : null}
           </div> : null}
 
           {creditCardTab === "unbilled" ? <div className="card grid" style={{ boxShadow: "none" }}>
