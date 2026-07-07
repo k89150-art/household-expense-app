@@ -463,6 +463,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     }
     await addLegacyInstallmentRecord({
       name: legacyName.trim(),
+      owner: viewer,
       card: legacyCard,
       amount,
       totalInstallments,
@@ -501,19 +502,23 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const paidNowAdvance = advances.filter((record) => record.paymentMethod !== "credit_card").reduce((sum, record) => sum + record.amount, 0);
   const pendingAdvance = pendingAdvanceRecords.reduce((sum, record) => sum + record.amount, 0);
   const reimbursedAdvance = advances.filter((record) => record.status === "已收回").reduce((sum, record) => sum + record.amount, 0);
-  const cardPaymentTotal = cardPayments.reduce((sum, record) => sum + record.amount, 0);
+  const ownCardPayments = useMemo(() => cardPayments.filter((record) => record.owner === viewer), [cardPayments, viewer]);
+  const ownDueBillPayments = useMemo(() => dueBillPayments.filter((record) => record.owner === viewer), [dueBillPayments, viewer]);
+  const ownDueAdvances = useMemo(() => dueAdvances.filter((record) => record.owner === viewer), [dueAdvances, viewer]);
+  const ownCreditCardExpenses = useMemo(() => allCreditCardExpenses.filter((record) => record.paidBy === viewer), [allCreditCardExpenses, viewer]);
+  const cardPaymentTotal = ownCardPayments.reduce((sum, record) => sum + record.amount, 0);
   const advanceCashFlow = paidNowAdvance - reimbursedAdvance;
   const availableBalance = totalIncome - paidNowExpense - paidNowAdvance - cardPaymentTotal - totalInvestment + reimbursedAdvance;
   const groupedTargets = useMemo(() => groupByTarget(expenses), [expenses]);
   const groupedIncomes = useMemo(() => groupByOwner(incomes), [incomes]);
   const groupedInvestments = useMemo(() => groupByOwner(investments), [investments]);
-  const creditCardGroups = useMemo(() => groupDueCreditCardBills(dueAdvances, allCreditCardExpenses, [], selectedMonth), [dueAdvances, allCreditCardExpenses, selectedMonth]);
-  const activeLegacyInstallments = useMemo(() => legacyInstallments.filter((record) => record.isActive), [legacyInstallments]);
-  const dueCreditCardGroups = useMemo(() => groupDueCreditCardBills(dueAdvances, allCreditCardExpenses, activeLegacyInstallments, dueBillMonth), [dueAdvances, allCreditCardExpenses, activeLegacyInstallments, dueBillMonth]);
+  const creditCardGroups = useMemo(() => groupDueCreditCardBills(ownDueAdvances, ownCreditCardExpenses, [], selectedMonth), [ownDueAdvances, ownCreditCardExpenses, selectedMonth]);
+  const activeLegacyInstallments = useMemo(() => legacyInstallments.filter((record) => record.isActive && (record.owner ?? "chris") === viewer), [legacyInstallments, viewer]);
+  const dueCreditCardGroups = useMemo(() => groupDueCreditCardBills(ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, dueBillMonth), [ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, dueBillMonth]);
   const dueCreditCardTotal = Object.values(dueCreditCardGroups).flat().reduce((sum, record) => sum + record.amount, 0);
   const dueCardSummaries = useMemo(() => Object.entries(dueCreditCardGroups).map(([card, cardRecords]) => {
     const typedCard = card as CreditCardName;
-    const payment = dueBillPayments.find((item) => item.card === typedCard);
+    const payment = ownDueBillPayments.find((item) => item.card === typedCard);
     const isPaid = Boolean(payment);
     const isClosed = isCardStatementClosed(typedCard, dueBillMonth);
     return {
@@ -523,7 +528,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       payment,
       state: isPaid ? "paid" as const : isClosed ? "due" as const : "estimate" as const,
     };
-  }), [dueCreditCardGroups, dueBillPayments, dueBillMonth]);
+  }), [dueCreditCardGroups, ownDueBillPayments, dueBillMonth]);
   const dueCardCount = dueCardSummaries.filter((item) => item.state === "due").length;
   const estimatedCardCount = dueCardSummaries.filter((item) => item.state === "estimate").length;
 
@@ -794,8 +799,8 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
 
           {creditCardTab === "paid" ? <div className="card grid" style={{ boxShadow: "none" }}>
             <strong>本月已繳信用卡</strong>
-            {cardPayments.length === 0 ? <p className="muted">這個月份還沒有信用卡繳款紀錄</p> : null}
-            {cardPayments.map((payment) => <div className="row" key={payment.id}><span>{payment.date.slice(5)}　{payment.card}・{payment.billMonth}帳單</span><span className="muted">{money(payment.amount)}</span></div>)}
+            {ownCardPayments.length === 0 ? <p className="muted">這個月份還沒有你的信用卡繳款紀錄</p> : null}
+            {ownCardPayments.map((payment) => <div className="row" key={payment.id}><span>{payment.date.slice(5)}　{payment.card}・{payment.billMonth}帳單</span><span className="muted">{money(payment.amount)}</span></div>)}
           </div> : null}
         </div> : null}
       </article>

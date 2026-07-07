@@ -106,6 +106,7 @@ export type LegacyInstallmentRecord = {
   householdId: string;
   kind: "legacyInstallment";
   name: string;
+  owner?: OwnerKey;
   card: CreditCardName;
   amount: number;
   totalInstallments: number;

@@ -104,6 +104,10 @@ export function HouseholdReport() {
     const cashFlow = incomeTotal - totalOutflow + reimbursedAdvance;
     const categoryLines = toLines(groupTotal(expenses, (record) => record.category));
     const payerLines = toLines(groupTotal(expenses, (record) => record.paidBy === "chris" ? "我付款" : "太太付款"));
+    const creditCardLines = toLines(groupTotal(
+      expenses.filter((record) => record.paymentMethod === "credit_card"),
+      (record) => `${record.paidBy === "chris" ? "先生" : "太太"}・${record.creditCard ?? "未指定信用卡"}`,
+    ));
     const recentRecords = [...expenses]
       .sort((a, b) => b.date.localeCompare(a.date))
       .slice(0, 6)
@@ -127,12 +131,14 @@ export function HouseholdReport() {
       cashFlow,
       categoryLines,
       payerLines,
+      creditCardLines,
       recentRecords,
     };
   }, [advances, cardPayments, expenses, incomes, investments]);
 
   const maxCategory = largestAmount(report.categoryLines);
   const maxPayer = largestAmount(report.payerLines);
+  const maxCreditCard = largestAmount(report.creditCardLines);
 
   return (
     <section className="report-page grid">
@@ -206,6 +212,22 @@ export function HouseholdReport() {
           <div className="report-bar compact" key={line.label}>
             <div className="row"><span>{line.label}</span><strong>{money(line.amount)}</strong></div>
             <span style={{ width: `${Math.max(8, Math.round((line.amount / maxPayer) * 100))}%` }} />
+          </div>
+        ))}
+      </article>
+
+      <article className="panel report-list">
+        <div className="journal-head compact">
+          <div>
+            <h2>信用卡分布</h2>
+            <p>共同查帳用；首頁只顯示登入者自己的信用卡。</p>
+          </div>
+        </div>
+        {report.creditCardLines.length === 0 ? <p className="muted">這個月還沒有信用卡消費。</p> : null}
+        {report.creditCardLines.map((line) => (
+          <div className="report-bar compact" key={line.label}>
+            <div className="row"><span>{line.label}</span><strong>{money(line.amount)}</strong></div>
+            <span style={{ width: `${Math.max(8, Math.round((line.amount / maxCreditCard) * 100))}%` }} />
           </div>
         ))}
       </article>
