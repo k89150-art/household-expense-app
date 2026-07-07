@@ -595,10 +595,6 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const creditCardGroups = useMemo(() => groupDueCreditCardBills(ownDueAdvances, ownCreditCardExpenses, [], selectedMonth), [ownDueAdvances, ownCreditCardExpenses, selectedMonth]);
   const activeLegacyInstallments = useMemo(() => legacyInstallments.filter((record) => record.isActive && (record.owner ?? "chris") === viewer), [legacyInstallments, viewer]);
   const dueCreditCardGroups = useMemo(() => groupDueCreditCardBills(ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, dueBillMonth), [ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, dueBillMonth]);
-  const dueCreditCardTotal = Object.entries(dueCreditCardGroups).reduce((sum, [card, records]) => {
-    const cardTotal = records.reduce((cardSum, record) => cardSum + record.amount, 0);
-    return sum + cardTotal + cardPaymentFee(card as CreditCardName);
-  }, 0);
   const dueCardSummaries = useMemo(() => Object.entries(dueCreditCardGroups).map(([card, cardRecords]) => {
     const typedCard = card as CreditCardName;
     const payment = ownDueBillPayments.find((item) => item.card === typedCard);
@@ -612,6 +608,9 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       state: isPaid ? "paid" as const : isClosed ? "due" as const : "estimate" as const,
     };
   }), [dueCreditCardGroups, ownDueBillPayments, dueBillMonth]);
+  const dueCreditCardTotal = dueCardSummaries
+    .filter((item) => item.state !== "paid")
+    .reduce((sum, item) => sum + item.cardTotal + cardPaymentFee(item.card), 0);
   const dueCardCount = dueCardSummaries.filter((item) => item.state === "due").length;
   const estimatedCardCount = dueCardSummaries.filter((item) => item.state === "estimate").length;
 
