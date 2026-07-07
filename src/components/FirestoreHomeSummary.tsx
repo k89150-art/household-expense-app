@@ -188,6 +188,20 @@ function ownerLabel(owner: "chris" | "wife", viewer: Viewer) {
   return viewer === "wife" ? "我" : "太太";
 }
 
+function cardLineTitle(record: CardLine) {
+  if (record.sourceExpense?.isPrivate) return "個人雜支";
+  return record.label;
+}
+
+function cardLineMeta(record: CardLine, viewer: Viewer) {
+  const tags: string[] = [];
+  if (record.sourceExpense) tags.push(`${displayPaidBy(record.sourceExpense, viewer)}刷`);
+  if (record.kind === "advance") tags.push("代墊");
+  if (record.kind === "installment") tags.push("分期");
+  if (record.kind === "legacyInstallment") tags.push("記帳前分期");
+  return tags.join("・");
+}
+
 function addCardLine(groups: Record<string, CardLine[]>, card: string, line: CardLine) {
   groups[card] = [...(groups[card] ?? []), line];
 }
@@ -272,6 +286,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [showAdvances, setShowAdvances] = useState(false);
   const [showCreditCards, setShowCreditCards] = useState(false);
   const [creditCardTab, setCreditCardTab] = useState<CreditCardTab>("due");
+  const [openedCardDetails, setOpenedCardDetails] = useState<Record<string, boolean>>({});
   const [manualPaymentCard, setManualPaymentCard] = useState<CreditCardName>("國泰");
   const [manualPaymentBillMonth, setManualPaymentBillMonth] = useState(shiftMonth(currentMonthString(), -1));
   const [manualPaymentDate, setManualPaymentDate] = useState(localDateString());
@@ -474,6 +489,10 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     await loadRecords();
   }
 
+  function toggleCardDetails(key: string) {
+    setOpenedCardDetails((current) => ({ ...current, [key]: !current[key] }));
+  }
+
   const dueBillMonth = shiftMonth(selectedMonth, -1);
   const totalIncome = incomes.reduce((sum, record) => sum + record.amount, 0);
   const paidNowExpense = expenses.filter((record) => record.paymentMethod !== "credit_card").reduce((sum, record) => sum + record.amount, 0);
@@ -625,20 +644,35 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
             <p className="muted" style={{ margin: 0 }}>刷卡日照實填，系統會依卡別結帳日歸帳；7 號結帳卡會包含 6/8 到 7/7。</p>
             {dueCardSummaries.length === 0 ? <p className="muted">這個繳款月份目前沒有信用卡帳單資料</p> : null}
             {dueCardSummaries.map(({ card, cardRecords, cardTotal, payment, state }) => {
-              return <div className="card grid" style={{ boxShadow: "none" }} key={`due-${card}`}>
-                <div className="row"><strong>{card}</strong><strong>{money(cardTotal)}</strong></div>
-                <div className="muted">{cardStatementLabel(card as CreditCardName, dueBillMonth)}</div>
-                <div className="muted">{cardStatementStatusLabel(card as CreditCardName, dueBillMonth)}</div>
-                <div className="row"><span>狀態</span>{statusBadge(state)}</div>
+              const detailKey = `due-${card}`;
+              const isOpen = Boolean(openedCardDetails[detailKey]);
+              return <div className="card credit-card-summary grid" style={{ boxShadow: "none" }} key={detailKey}>
+                <div className="row">
+                  <div><strong>{card}</strong><div className="muted">{cardRecords.length} 筆明細</div></div>
+                  <strong>{money(cardTotal)}</strong>
+                </div>
+                <div className="credit-card-meta">
+                  <span>{cardStatementLabel(card as CreditCardName, dueBillMonth)}</span>
+                  <span>{cardStatementStatusLabel(card as CreditCardName, dueBillMonth)}</span>
+                  {statusBadge(state)}
+                </div>
                 {payment ? <div className="muted">繳款日：{payment.paidDate}・{money(payment.amount)}</div> : null}
                 {state === "due" ? <button className="btn" type="button" onClick={() => handleCreateCardPayment(card, cardTotal, dueBillMonth)}>建立繳款紀錄</button> : null}
                 {state === "estimate" ? <button className="btn secondary" type="button" disabled>未結帳，先核對明細</button> : null}
                 {payment ? <button className="btn secondary" type="button" onClick={() => handleDeleteCardPayment(payment.id)}>取消繳款紀錄</button> : null}
-                {cardRecords.map((record, index) => <div className="row" key={`${card}-${record.date}-${index}`}>
-                  <span>{record.date.slice(5)}　{record.label}</span>
-                  <span className="muted">{money(record.amount)}{record.kind === "advance" ? "・代墊" : ""}{record.kind === "installment" ? "・分期" : ""}{record.kind === "legacyInstallment" ? "・記帳前分期" : ""}</span>
-                  {record.sourceExpense?.installment?.enabled ? <button className="btn secondary" type="button" onClick={() => record.sourceExpense ? handleUpdateInstallmentFirstBillMonth(record.sourceExpense) : undefined}>修改分期月份</button> : null}
-                </div>)}
+                <button className="btn secondary compact-btn" type="button" onClick={() => toggleCardDetails(detailKey)}>{isOpen ? "收合明細" : "查看明細"}</button>
+                {isOpen ? <div className="credit-card-lines">
+                  {cardRecords.map((record, index) => <div className="credit-card-line" key={`${card}-${record.date}-${index}`}>
+                    <div>
+                      <strong>{record.date.slice(5)}　{cardLineTitle(record)}</strong>
+                      <div className="muted">{cardLineMeta(record, viewer)}</div>
+                    </div>
+                    <div className="credit-card-line-side">
+                      <span>{money(record.amount)}</span>
+                      {record.sourceExpense?.installment?.enabled ? <button className="btn secondary delete-btn" type="button" onClick={() => record.sourceExpense ? handleUpdateInstallmentFirstBillMonth(record.sourceExpense) : undefined}>修改</button> : null}
+                    </div>
+                  </div>)}
+                </div> : null}
               </div>;
             })}
           </div> : null}
@@ -649,15 +683,30 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
             {Object.keys(creditCardGroups).length === 0 ? <p className="muted">目前沒有未出帳信用卡明細</p> : null}
             {Object.entries(creditCardGroups).map(([card, cardRecords]) => {
               const cardTotal = cardRecords.reduce((sum, record) => sum + record.amount, 0);
-              return <div className="card grid" style={{ boxShadow: "none" }} key={`current-${card}`}>
-                <div className="row"><strong>{card}</strong><strong>{money(cardTotal)}</strong></div>
-                <div className="muted">{cardStatementLabel(card as CreditCardName, selectedMonth)}</div>
-                <div className="muted">{cardStatementStatusLabel(card as CreditCardName, selectedMonth)}</div>
-                {cardRecords.map((record, index) => <div className="row" key={`${card}-${record.date}-${index}`}>
-                  <span>{record.date.slice(5)}　{record.label}</span>
-                  <span className="muted">{money(record.amount)}{record.kind === "advance" ? "・代墊" : ""}{record.sourceExpense?.installment?.enabled ? "・分期" : ""}</span>
-                  {record.sourceExpense?.installment?.enabled ? <button className="btn secondary" type="button" onClick={() => record.sourceExpense ? handleUpdateInstallmentFirstBillMonth(record.sourceExpense) : undefined}>修改分期月份</button> : null}
-                </div>)}
+              const detailKey = `unbilled-${card}`;
+              const isOpen = Boolean(openedCardDetails[detailKey]);
+              return <div className="card credit-card-summary grid" style={{ boxShadow: "none" }} key={detailKey}>
+                <div className="row">
+                  <div><strong>{card}</strong><div className="muted">{cardRecords.length} 筆明細</div></div>
+                  <strong>{money(cardTotal)}</strong>
+                </div>
+                <div className="credit-card-meta">
+                  <span>{cardStatementLabel(card as CreditCardName, selectedMonth)}</span>
+                  <span>{cardStatementStatusLabel(card as CreditCardName, selectedMonth)}</span>
+                </div>
+                <button className="btn secondary compact-btn" type="button" onClick={() => toggleCardDetails(detailKey)}>{isOpen ? "收合明細" : "查看明細"}</button>
+                {isOpen ? <div className="credit-card-lines">
+                  {cardRecords.map((record, index) => <div className="credit-card-line" key={`${card}-${record.date}-${index}`}>
+                    <div>
+                      <strong>{record.date.slice(5)}　{cardLineTitle(record)}</strong>
+                      <div className="muted">{cardLineMeta(record, viewer)}</div>
+                    </div>
+                    <div className="credit-card-line-side">
+                      <span>{money(record.amount)}</span>
+                      {record.sourceExpense?.installment?.enabled ? <button className="btn secondary delete-btn" type="button" onClick={() => record.sourceExpense ? handleUpdateInstallmentFirstBillMonth(record.sourceExpense) : undefined}>修改</button> : null}
+                    </div>
+                  </div>)}
+                </div> : null}
               </div>;
             })}
           </div> : null}

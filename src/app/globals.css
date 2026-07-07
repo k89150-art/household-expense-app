@@ -572,6 +572,66 @@ textarea {
   padding: 6px 10px;
 }
 
+.credit-card-summary {
+  gap: 10px;
+}
+
+.credit-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.credit-card-meta span {
+  min-width: 0;
+}
+
+.compact-btn {
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+.credit-card-lines {
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.credit-card-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid var(--hair);
+  padding-top: 8px;
+}
+
+.credit-card-line strong {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.credit-card-line .muted {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.credit-card-line-side {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  color: var(--muted);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .journal-head.compact {
   display: grid;
   grid-template-columns: 1fr;
