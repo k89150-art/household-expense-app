@@ -145,6 +145,18 @@ function legacyInstallmentLine(record: LegacyInstallmentRecord, billMonth: strin
   };
 }
 
+function nextLegacyInstallmentState(record: LegacyInstallmentRecord, paidBillMonth: string) {
+  const monthOffset = monthDiff(record.nextBillMonth, paidBillMonth);
+  const paidInstallmentNo = record.nextInstallmentNo + Math.max(0, monthOffset);
+  if (paidInstallmentNo >= record.totalInstallments) {
+    return { isActive: false };
+  }
+  return {
+    nextInstallmentNo: paidInstallmentNo + 1,
+    nextBillMonth: shiftMonth(paidBillMonth, 1),
+  };
+}
+
 function isValidMonth(value: string) {
   return /^\d{4}-\d{2}$/.test(value);
 }
@@ -424,13 +436,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       createdBy: user.uid,
     });
     await Promise.all(dueLegacyInstallments.map((record) => {
-      const isLastInstallment = record.nextInstallmentNo >= record.totalInstallments;
-      return updateLegacyInstallmentRecord(record.id, isLastInstallment
-        ? { isActive: false }
-        : {
-          nextInstallmentNo: record.nextInstallmentNo + 1,
-          nextBillMonth: shiftMonth(record.nextBillMonth, 1),
-        });
+      return updateLegacyInstallmentRecord(record.id, nextLegacyInstallmentState(record, billMonth));
     }));
     await loadRecords();
   }
