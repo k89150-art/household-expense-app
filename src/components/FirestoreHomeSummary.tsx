@@ -174,6 +174,17 @@ function nextLegacyInstallmentState(record: LegacyInstallmentRecord, paidBillMon
   };
 }
 
+function matchingPaidBillMonths(record: LegacyInstallmentRecord, payments: CardPaymentRecord[], viewer: Viewer) {
+  return payments
+    .filter((payment) =>
+      payment.owner === viewer &&
+      payment.card === record.card &&
+      payment.billMonth >= record.nextBillMonth
+    )
+    .map((payment) => payment.billMonth)
+    .sort();
+}
+
 function isValidMonth(value: string) {
   return /^\d{4}-\d{2}$/.test(value);
 }
@@ -342,7 +353,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     setMessage("");
     try {
       const dueBillMonth = shiftMonth(selectedMonth, -1);
-      const [expenseData, incomeData, investmentData, advanceData, dueAdvanceData, allCardExpenseData, paymentData, duePaymentData, legacyInstallmentData] = await Promise.all([
+      const [expenseData, incomeData, investmentData, advanceData, dueAdvanceData, allCardExpenseData, paymentData, duePaymentData, allPaymentData, legacyInstallmentData] = await Promise.all([
         scope === "month" ? getExpenseRecordsByMonth(selectedMonth) : getAllExpenseRecords(),
         scope === "month" ? getIncomeRecordsByMonth(selectedMonth) : getAllIncomeRecords(),
         scope === "month" ? getInvestmentRecordsByMonth(selectedMonth) : getAllInvestmentRecords(),
@@ -351,8 +362,18 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
         getCreditCardExpenseRecords(),
         scope === "month" ? getCardPaymentRecordsByMonth(selectedMonth) : getAllCardPaymentRecords(),
         getCardPaymentRecordsByBillMonth(dueBillMonth),
+        getAllCardPaymentRecords(),
         getLegacyInstallmentRecords(),
       ]);
+      const syncedLegacyInstallments = await Promise.all(legacyInstallmentData.map(async (record) => {
+        if (!record.isActive || (record.owner ?? "chris") !== viewer) return record;
+        const paidBillMonths = matchingPaidBillMonths(record, allPaymentData, viewer);
+        const latestPaidBillMonth = paidBillMonths.at(-1);
+        if (!latestPaidBillMonth) return record;
+        const nextState = nextLegacyInstallmentState(record, latestPaidBillMonth);
+        await updateLegacyInstallmentRecord(record.id, nextState);
+        return { ...record, ...nextState };
+      }));
       setExpenses(expenseData);
       setIncomes(incomeData);
       setInvestments(investmentData);
@@ -361,7 +382,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       setAllCreditCardExpenses(allCardExpenseData);
       setCardPayments(paymentData);
       setDueBillPayments(duePaymentData);
-      setLegacyInstallments(legacyInstallmentData);
+      setLegacyInstallments(syncedLegacyInstallments);
     } catch (error) {
       console.error(error);
       setMessage(`讀取資料失敗，請稍後再試或確認 Firebase 設定。錯誤：${getErrorCode(error)}`);
