@@ -182,7 +182,32 @@ async function addRecord(collectionName: string, input: Record<string, unknown>)
   return docRef.id;
 }
 
-async function getRecordsByMonth<T>(collectionName: string, month: string) {
+type DatedRecord = { id: string; date: string; createdAt?: unknown };
+
+function timestampValue(value: unknown) {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "string") return Date.parse(value) || 0;
+  if (typeof value !== "object") return 0;
+
+  const candidate = value as { toMillis?: unknown; seconds?: unknown; nanoseconds?: unknown };
+  if (typeof candidate.toMillis === "function") return candidate.toMillis();
+  if (typeof candidate.seconds === "number") {
+    const nanos = typeof candidate.nanoseconds === "number" ? candidate.nanoseconds : 0;
+    return candidate.seconds * 1000 + Math.floor(nanos / 1_000_000);
+  }
+  return 0;
+}
+
+function sortLatestFirst<T extends DatedRecord>(records: T[]) {
+  return records.sort((a, b) =>
+    b.date.localeCompare(a.date) ||
+    timestampValue(b.createdAt) - timestampValue(a.createdAt) ||
+    b.id.localeCompare(a.id)
+  );
+}
+
+async function getRecordsByMonth<T extends DatedRecord>(collectionName: string, month: string) {
   const collectionRef = collection(db, "households", HOUSEHOLD_ID, collectionName);
   const snapshot = await getDocs(query(
     collectionRef,
@@ -191,13 +216,13 @@ async function getRecordsByMonth<T>(collectionName: string, month: string) {
     where("date", "<=", `${month}-31`),
     orderBy("date", "desc"),
   ));
-  return snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() })) as T[];
+  return sortLatestFirst(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as T));
 }
 
-async function getAllRecords<T>(collectionName: string) {
+async function getAllRecords<T extends DatedRecord>(collectionName: string) {
   const collectionRef = collection(db, "households", HOUSEHOLD_ID, collectionName);
   const snapshot = await getDocs(query(collectionRef, where("householdId", "==", HOUSEHOLD_ID), orderBy("date", "desc")));
-  return snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() })) as T[];
+  return sortLatestFirst(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as T));
 }
 
 export async function addExpenseRecord(input: NewExpenseInput) {
@@ -232,9 +257,7 @@ export async function getAllExpenseRecords() {
 export async function getCreditCardExpenseRecords() {
   const collectionRef = collection(db, "households", HOUSEHOLD_ID, "expenses");
   const snapshot = await getDocs(query(collectionRef, where("householdId", "==", HOUSEHOLD_ID), where("paymentMethod", "==", "credit_card")));
-  return snapshot.docs
-    .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as ExpenseRecord)
-    .sort((a, b) => b.date.localeCompare(a.date));
+  return sortLatestFirst(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as ExpenseRecord));
 }
 
 export async function updateExpenseRecord(id: string, input: Partial<NewExpenseInput>) {
@@ -318,9 +341,7 @@ export async function getAllCardPaymentRecords() {
 export async function getCardPaymentRecordsByBillMonth(month: string) {
   const collectionRef = collection(db, "households", HOUSEHOLD_ID, "cardPayments");
   const snapshot = await getDocs(query(collectionRef, where("householdId", "==", HOUSEHOLD_ID), where("billMonth", "==", month)));
-  return snapshot.docs
-    .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as CardPaymentRecord)
-    .sort((a, b) => b.date.localeCompare(a.date));
+  return sortLatestFirst(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as CardPaymentRecord));
 }
 
 export async function deleteCardPaymentRecord(id: string) {
