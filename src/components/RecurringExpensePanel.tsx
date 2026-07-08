@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
-import { addExpenseRecord, deleteRecurringExpenseTemplate, getRecurringExpenseTemplates, upsertRecurringExpenseTemplate } from "@/lib/records";
+import { addExpenseRecord, deleteRecurringExpenseTemplate, getExpenseRecordsByMonth, getRecurringExpenseTemplates, upsertRecurringExpenseTemplate } from "@/lib/records";
 import type { CreditCardName, OwnerKey, RecurringExpenseTemplateRecord } from "@/lib/records";
 import type { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
 
@@ -248,6 +248,19 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
     setIsSaving(true);
     setMessage("");
     try {
+      const existingExpenses = await getExpenseRecordsByMonth(expenseDate.slice(0, 7));
+      const duplicate = existingExpenses.find((record) =>
+        record.note === selectedItem.name &&
+        record.category === category &&
+        record.target === target &&
+        record.paidBy === viewer &&
+        record.paymentMethod === paymentMethod &&
+        (record.creditCard ?? "") === (paymentMethod === "credit_card" ? selectedItem.creditCard ?? "" : "")
+      );
+      if (duplicate) {
+        const duplicateOk = window.confirm(`這個月已經新增過「${selectedItem.name}」。仍然要再新增一次嗎？`);
+        if (!duplicateOk) return;
+      }
       await addExpenseRecord({
         date: expenseDate,
         amount: selectedItem.amount,

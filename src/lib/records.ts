@@ -96,6 +96,12 @@ export type CardPaymentRecord = {
   status: "已繳款";
   paidDate: string;
   note?: string;
+  legacyInstallmentAdjustments?: {
+    id: string;
+    nextInstallmentNo: number;
+    nextBillMonth: string;
+    isActive: boolean;
+  }[];
   createdBy: string;
   createdAt?: unknown;
   updatedAt?: unknown;
