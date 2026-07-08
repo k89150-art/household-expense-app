@@ -59,6 +59,7 @@ function isSubscriptionItem(item: RecurringItem) {
 
 const DEFAULT_ITEMS: RecurringItem[] = [
   { id: "mortgage", name: "房貸", category: "房貸", amount: 25000, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
+  { id: "personal-loan", name: "信貸", category: "信貸", amount: 0, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
   { id: "mobile-chris", name: "手機門號費", category: "手機門號費", amount: 699, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
   { id: "mobile-wife", name: "手機門號費", category: "手機門號費", amount: 699, target: "self", paymentMethod: "銀行扣款", visibleFor: ["wife"] },
   { id: "insurance-self-chris", name: "保險：我", category: "保險", amount: 4200, target: "self", paymentMethod: "信用卡", creditCard: "台新", visibleFor: ["chris"] },
