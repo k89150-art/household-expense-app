@@ -519,6 +519,35 @@ textarea {
   color: var(--espresso);
 }
 
+.cashflow-pair {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.cashflow-pair > div {
+  border: 1px solid rgba(51, 36, 31, 0.1);
+  border-radius: 18px;
+  padding: 12px;
+  background: rgba(255, 248, 237, 0.36);
+}
+
+.cashflow-pair span {
+  display: block;
+  color: rgba(51, 36, 31, 0.58);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.cashflow-pair strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 19px;
+  line-height: 1.15;
+}
+
 .home-summary > .card:nth-child(2) .muted {
   position: relative;
   z-index: 1;

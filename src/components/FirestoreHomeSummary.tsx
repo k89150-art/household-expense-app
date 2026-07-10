@@ -497,13 +497,20 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const paidNowAdvance = advances.filter((record) => record.paymentMethod !== "credit_card").reduce((sum, record) => sum + record.amount, 0);
   const pendingAdvance = pendingAdvanceRecords.reduce((sum, record) => sum + record.amount, 0);
   const reimbursedAdvance = advances.filter((record) => record.status === "已收回").reduce((sum, record) => sum + record.amount, 0);
+  const totalCardPayment = cardPayments.reduce((sum, record) => sum + record.amount, 0);
   const ownCardPayments = useMemo(() => cardPayments.filter((record) => record.owner === viewer), [cardPayments, viewer]);
   const ownDueBillPayments = useMemo(() => dueBillPayments.filter((record) => record.owner === viewer), [dueBillPayments, viewer]);
   const ownDueAdvances = useMemo(() => dueAdvances.filter((record) => record.owner === viewer), [dueAdvances, viewer]);
   const ownCreditCardExpenses = useMemo(() => allCreditCardExpenses.filter((record) => record.paidBy === viewer), [allCreditCardExpenses, viewer]);
+  const ownIncome = incomes.filter((record) => record.owner === viewer).reduce((sum, record) => sum + record.amount, 0);
+  const ownPaidNowExpense = expenses.filter((record) => record.paymentMethod !== "credit_card" && record.paidBy === viewer).reduce((sum, record) => sum + record.amount, 0);
+  const ownInvestment = investments.filter((record) => record.owner === viewer).reduce((sum, record) => sum + record.amount, 0);
+  const ownPaidNowAdvance = advances.filter((record) => record.paymentMethod !== "credit_card" && record.owner === viewer).reduce((sum, record) => sum + record.amount, 0);
+  const ownReimbursedAdvance = advances.filter((record) => record.owner === viewer && record.status === "已收回").reduce((sum, record) => sum + record.amount, 0);
   const cardPaymentTotal = ownCardPayments.reduce((sum, record) => sum + record.amount, 0);
   const advanceCashFlow = paidNowAdvance - reimbursedAdvance;
-  const availableBalance = totalIncome - paidNowExpense - paidNowAdvance - cardPaymentTotal - totalInvestment + reimbursedAdvance;
+  const familyAvailableBalance = totalIncome - paidNowExpense - paidNowAdvance - totalCardPayment - totalInvestment + reimbursedAdvance;
+  const personalCashFlow = ownIncome - ownPaidNowExpense - ownPaidNowAdvance - cardPaymentTotal - ownInvestment + ownReimbursedAdvance;
   const groupedTargets = useMemo(() => groupByTarget(expenses), [expenses]);
   const groupedIncomes = useMemo(() => groupByOwner(incomes), [incomes]);
   const groupedInvestments = useMemo(() => groupByOwner(investments), [investments]);
@@ -554,13 +561,23 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
 
       <article className="card grid">
         <h2>{scope === "month" ? "本月剩餘可用金額" : "目前月份剩餘可用金額"}</h2>
-        <div className="row"><span>可用剩餘</span><strong>{money(availableBalance)}</strong></div>
+        <div className="row"><span>家庭剩餘</span><strong>{money(familyAvailableBalance)}</strong></div>
+        <div className="cashflow-pair">
+          <div>
+            <span>我的現金流</span>
+            <strong>{money(personalCashFlow)}</strong>
+          </div>
+          <div>
+            <span>個人信用卡繳款</span>
+            <strong>{money(cardPaymentTotal)}</strong>
+          </div>
+        </div>
         <div className="row"><span>本月收入</span><strong>{money(totalIncome)}</strong></div>
         <div className="row"><span>已付生活支出</span><strong>{money(paidNowExpense)}</strong></div>
-        <div className="row"><span>信用卡繳款</span><strong>{money(cardPaymentTotal)}</strong></div>
+        <div className="row"><span>家庭信用卡繳款</span><strong>{money(totalCardPayment)}</strong></div>
         <div className="row"><span>投資</span><strong>{money(totalInvestment)}</strong></div>
         {advanceCashFlow !== 0 ? <div className="row"><span>代墊款現金流</span><strong>{money(advanceCashFlow)}</strong></div> : null}
-        <p className="muted" style={{ margin: 0 }}>信用卡消費先在刷卡核對；實際繳款後才會扣可用剩餘。</p>
+        <p className="muted" style={{ margin: 0 }}>家庭剩餘用共同帳本計算；我的現金流只看本人收入、本人付款與本人信用卡繳款。</p>
         {isLoading ? <p className="muted">讀取中...</p> : null}
         {message ? <p className="muted">{message}</p> : null}
       </article>
