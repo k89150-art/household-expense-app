@@ -127,7 +127,14 @@ async function saveTemplateToCloud(item: RecurringItem, userId: string) {
 export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
   const user = useCurrentUser();
   const [items, setItems] = useState<RecurringItem[]>(loadStoredItems);
-  const visibleItems = useMemo(() => items.filter((item) => item.visibleFor.includes(viewer)), [items, viewer]);
+  const visibleItems = useMemo(() => items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => item.visibleFor.includes(viewer))
+    .sort((a, b) =>
+      Number(isSubscriptionItem(a.item)) - Number(isSubscriptionItem(b.item)) ||
+      a.index - b.index
+    )
+    .map(({ item }) => item), [items, viewer]);
   const creditCards = useMemo(() => getNormalCreditCards(viewer), [viewer]);
   const [selectedId, setSelectedId] = useState("");
   const [amountDraft, setAmountDraft] = useState("");
