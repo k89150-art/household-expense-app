@@ -50,7 +50,7 @@ const CARD_STATEMENT_POLICIES: Record<CreditCardName, CardStatementPolicy> = {
   國泰: { closingDay: 28, closesInFollowingMonth: false },
   中信: { closingDay: 7, closesInFollowingMonth: true },
   玉山: { closingDay: 7, closesInFollowingMonth: true },
-  台新: { closingDay: 7, closesInFollowingMonth: true },
+  台新: { closingDay: 2, closesInFollowingMonth: true },
   保費卡: { closingDay: 7, closesInFollowingMonth: true },
 };
 const CARD_PAYMENT_FEES: Partial<Record<CreditCardName, number>> = {
@@ -659,7 +659,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
 
           {creditCardTab === "due" ? <div className="card grid" style={{ boxShadow: "none" }}>
             <strong>本月預計應繳信用卡（{monthLabel(dueBillMonth)}帳單）</strong>
-            <p className="muted" style={{ margin: 0 }}>刷卡日照實填，系統會依卡別結帳日歸帳；7 號結帳卡會包含 6/8 到 7/7。</p>
+            <p className="muted" style={{ margin: 0 }}>刷卡日照實填，系統會依各卡結帳日自動歸帳；實際區間會顯示在每張卡的明細中。</p>
             {dueCardSummaries.length === 0 ? <p className="muted">這個繳款月份目前沒有信用卡帳單資料</p> : null}
             {dueCardSummaries.map(({ card, cardRecords, cardTotal, payment, state }) => {
               const detailKey = `due-${card}`;
