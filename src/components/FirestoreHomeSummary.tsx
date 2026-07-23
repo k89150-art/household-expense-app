@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
+import { cardActivityRange, cardStatementLabel, isInCardStatement, monthDiff, monthLabel, nextLegacyInstallmentState, shiftMonth, statementRangeForCard } from "@/lib/cardBilling";
 import { currentMonthString, localDateString } from "@/lib/date";
 import {
   addCardPaymentRecord,
@@ -15,8 +16,10 @@ import {
   getAllExpenseRecords,
   getAllIncomeRecords,
   getAllInvestmentRecords,
+  getAdvanceRecordsByDateRange,
   getAdvanceRecordsByMonth,
   getCardPaymentRecordsByBillMonth,
+  getCardPaymentRecordsFromBillMonth,
   getCardPaymentRecordsByMonth,
   getCreditCardExpenseRecords,
   getExpenseRecordsByMonth,
@@ -44,15 +47,6 @@ type Scope = "month" | "all";
 type CreditCardTab = "due" | "unbilled" | "paid";
 type Props = { viewer: Viewer; refreshKey?: number };
 type CardLine = { date: string; label: string; amount: number; kind: "expense" | "advance" | "installment" | "legacyInstallment"; sourceExpense?: ExpenseRecord };
-type CardStatementPolicy = { closingDay: number; closesInFollowingMonth: boolean };
-
-const CARD_STATEMENT_POLICIES: Record<CreditCardName, CardStatementPolicy> = {
-  國泰: { closingDay: 28, closesInFollowingMonth: false },
-  中信: { closingDay: 7, closesInFollowingMonth: true },
-  玉山: { closingDay: 7, closesInFollowingMonth: true },
-  台新: { closingDay: 2, closesInFollowingMonth: true },
-  保費卡: { closingDay: 7, closesInFollowingMonth: true },
-};
 const CARD_PAYMENT_FEES: Partial<Record<CreditCardName, number>> = {
   中信: 10,
 };
@@ -65,58 +59,6 @@ function money(value = 0) {
 
 function cardPaymentFee(card: CreditCardName) {
   return CARD_PAYMENT_FEES[card] ?? 0;
-}
-
-function shiftMonth(yyyymm: string, diff: number) {
-  const [year, month] = yyyymm.split("-").map(Number);
-  const date = new Date(year, month - 1 + diff, 1);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function monthDiff(fromMonth: string, toMonth: string) {
-  const [fromYear, fromMonthNumber] = fromMonth.split("-").map(Number);
-  const [toYear, toMonthNumber] = toMonth.split("-").map(Number);
-  return (toYear - fromYear) * 12 + (toMonthNumber - fromMonthNumber);
-}
-
-function monthLabel(yyyymm: string) {
-  const [year, month] = yyyymm.split("-");
-  return `${year} 年 ${Number(month)} 月`;
-}
-
-function dateString(year: number, month: number, day: number) {
-  const date = new Date(year, month - 1, day);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function addDays(yyyyMMdd: string, days: number) {
-  const [year, month, day] = yyyyMMdd.split("-").map(Number);
-  return dateString(year, month, day + days);
-}
-
-function statementDateForCard(card: CreditCardName, billMonth: string) {
-  const policy = CARD_STATEMENT_POLICIES[card] ?? CARD_STATEMENT_POLICIES.中信;
-  const statementMonth = policy.closesInFollowingMonth ? shiftMonth(billMonth, 1) : billMonth;
-  const [year, month] = statementMonth.split("-").map(Number);
-  return dateString(year, month, policy.closingDay);
-}
-
-function statementRangeForCard(card: CreditCardName, billMonth: string) {
-  const previousStatementDate = statementDateForCard(card, shiftMonth(billMonth, -1));
-  return {
-    startDate: addDays(previousStatementDate, 1),
-    endDate: statementDateForCard(card, billMonth),
-  };
-}
-
-function isInCardStatement(recordDate: string, card: CreditCardName, billMonth: string) {
-  const { startDate, endDate } = statementRangeForCard(card, billMonth);
-  return recordDate >= startDate && recordDate <= endDate;
-}
-
-function cardStatementLabel(card: CreditCardName, billMonth: string) {
-  const { startDate, endDate } = statementRangeForCard(card, billMonth);
-  return `${monthLabel(billMonth)}帳單｜${startDate.slice(5).replace("-", "/")} - ${endDate.slice(5).replace("-", "/")}｜${endDate} 結帳`;
 }
 
 function cardStatementStatusLabel(card: CreditCardName, billMonth: string) {
@@ -157,18 +99,6 @@ function legacyInstallmentDisplay(record: LegacyInstallmentRecord, billMonth: st
   return {
     label: `下一期 ${record.nextInstallmentNo}/${record.totalInstallments}・${record.nextBillMonth}`,
     isDue: false,
-  };
-}
-
-function nextLegacyInstallmentState(record: LegacyInstallmentRecord, paidBillMonth: string) {
-  const monthOffset = monthDiff(record.nextBillMonth, paidBillMonth);
-  const paidInstallmentNo = record.nextInstallmentNo + Math.max(0, monthOffset);
-  if (paidInstallmentNo >= record.totalInstallments) {
-    return { isActive: false };
-  }
-  return {
-    nextInstallmentNo: paidInstallmentNo + 1,
-    nextBillMonth: shiftMonth(paidBillMonth, 1),
   };
 }
 
@@ -332,6 +262,8 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [showCreditCards, setShowCreditCards] = useState(false);
   const [creditCardTab, setCreditCardTab] = useState<CreditCardTab>("unbilled");
   const [openedCardDetails, setOpenedCardDetails] = useState<Record<string, boolean>>({});
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const mutationLockRef = useRef(false);
   const [message, setMessage] = useState("");
 
   async function loadRecords() {
@@ -339,18 +271,27 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     setMessage("");
     try {
       const dueBillMonth = shiftMonth(selectedMonth, -1);
-      const [expenseData, incomeData, investmentData, advanceData, dueAdvanceData, allCardExpenseData, paymentData, duePaymentData, allPaymentData, legacyInstallmentData] = await Promise.all([
+      const activityRange = cardActivityRange([dueBillMonth, selectedMonth]);
+      const [expenseData, incomeData, investmentData, advanceData, dueAdvanceData, allCardExpenseData, paymentData, duePaymentData, legacyInstallmentData] = await Promise.all([
         scope === "month" ? getExpenseRecordsByMonth(selectedMonth) : getAllExpenseRecords(),
         scope === "month" ? getIncomeRecordsByMonth(selectedMonth) : getAllIncomeRecords(),
         scope === "month" ? getInvestmentRecordsByMonth(selectedMonth) : getAllInvestmentRecords(),
         scope === "month" ? getAdvanceRecordsByMonth(selectedMonth) : getAllAdvanceRecords(),
-        getAllAdvanceRecords(),
+        getAdvanceRecordsByDateRange(activityRange.startDate, activityRange.endDate),
         getCreditCardExpenseRecords(),
         scope === "month" ? getCardPaymentRecordsByMonth(selectedMonth) : getAllCardPaymentRecords(),
         getCardPaymentRecordsByBillMonth(dueBillMonth),
-        getAllCardPaymentRecords(),
         getLegacyInstallmentRecords(),
       ]);
+      const activeViewerInstallments = legacyInstallmentData.filter((record) =>
+        record.isActive && (record.owner ?? "chris") === viewer
+      );
+      const earliestInstallmentMonth = activeViewerInstallments
+        .map((record) => record.nextBillMonth)
+        .sort()[0];
+      const allPaymentData = earliestInstallmentMonth
+        ? await getCardPaymentRecordsFromBillMonth(earliestInstallmentMonth)
+        : [];
       const syncedLegacyInstallments = await Promise.all(legacyInstallmentData.map(async (record) => {
         if (!record.isActive || (record.owner ?? "chris") !== viewer) return record;
         const paidBillMonths = matchingPaidBillMonths(record, allPaymentData, viewer);
@@ -382,6 +323,23 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth, scope, refreshKey]);
 
+  async function runMutation(actionName: string, action: () => Promise<void>) {
+    if (mutationLockRef.current) return;
+    mutationLockRef.current = true;
+    setPendingAction(actionName);
+    setMessage("");
+    try {
+      await action();
+      await loadRecords();
+    } catch (error) {
+      console.error(error);
+      setMessage(`${actionName}失敗，請稍後再試。錯誤：${getErrorCode(error)}`);
+    } finally {
+      mutationLockRef.current = false;
+      setPendingAction(null);
+    }
+  }
+
   async function handleDeleteExpense(record: ExpenseRecord) {
     if (!user) {
       setMessage("請先登入。");
@@ -392,32 +350,30 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       return;
     }
     if (!window.confirm("確定要刪除這筆支出嗎？")) return;
-    await deleteExpenseRecord(record.id, user.uid);
-    await loadRecords();
+    await runMutation("刪除支出", () => deleteExpenseRecord(record.id, user.uid));
   }
 
   async function handleDeleteIncome(id: string) {
     if (!window.confirm("確定要刪除這筆收入嗎？")) return;
-    await deleteIncomeRecord(id);
-    await loadRecords();
+    await runMutation("刪除收入", () => deleteIncomeRecord(id));
   }
 
   async function handleDeleteInvestment(id: string) {
     if (!window.confirm("確定要刪除這筆投資紀錄嗎？")) return;
-    await deleteInvestmentRecord(id);
-    await loadRecords();
+    await runMutation("刪除投資紀錄", () => deleteInvestmentRecord(id));
   }
 
   async function handleDeleteAdvance(id: string) {
     if (!window.confirm("確定要刪除這筆代墊款嗎？")) return;
-    await deleteAdvanceRecord(id);
-    await loadRecords();
+    await runMutation("刪除代墊款", () => deleteAdvanceRecord(id));
   }
 
   async function handleAdvanceStatus(record: AdvanceRecord, status: AdvanceRecord["status"]) {
     if (!window.confirm(`確定要把「${record.item}」改成${status}嗎？`)) return;
-    await updateAdvanceRecord(record.id, { status, reimbursedDate: status === "已收回" ? localDateString() : undefined });
-    await loadRecords();
+    await runMutation("更新代墊款狀態", () => updateAdvanceRecord(record.id, {
+      status,
+      reimbursedDate: status === "已收回" ? localDateString() : undefined,
+    }));
   }
 
   async function handleUpdateInstallmentFirstBillMonth(record: ExpenseRecord) {
@@ -430,14 +386,13 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       return;
     }
     if (!window.confirm(`確定將這筆分期的第一期帳單月份改成 ${nextMonth} 嗎？`)) return;
-    await updateExpenseRecord(record.id, {
+    await runMutation("更新分期月份", () => updateExpenseRecord(record.id, {
       installment: {
         ...installment,
         firstBillMonth: nextMonth,
         schedule: splitInstallmentAmount(installment.totalPayable, installment.total, nextMonth),
       },
-    });
-    await loadRecords();
+    }));
   }
 
   async function handleCreateCardPayment(card: string, amount: number, billMonth: string) {
@@ -446,6 +401,14 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       return;
     }
     const typedCard = card as CreditCardName;
+    if (dueBillPayments.some((payment) =>
+      payment.owner === viewer &&
+      payment.card === typedCard &&
+      payment.billMonth === billMonth
+    )) {
+      setMessage(`${card} ${billMonth} 已有繳款紀錄，不會重複建立。`);
+      return;
+    }
     const fee = cardPaymentFee(typedCard);
     const paymentAmount = amount + fee;
     const feeText = fee > 0 ? `（含他行扣款手續費 ${money(fee)}）` : "";
@@ -466,7 +429,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       id: record.id,
       ...nextLegacyInstallmentState(record, billMonth),
     }));
-    await addCardPaymentRecord({
+    await runMutation("建立信用卡繳款", () => addCardPaymentRecord({
       date: localDateString(),
       amount: paymentAmount,
       owner: viewer,
@@ -477,14 +440,12 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       note: `${billMonth} ${card}帳單繳款${fee > 0 ? `，含他行扣款手續費 ${fee} 元` : ""}`,
       legacyInstallmentAdjustments,
       createdBy: user.uid,
-    }, legacyInstallmentUpdates);
-    await loadRecords();
+    }, legacyInstallmentUpdates));
   }
 
   async function handleDeleteCardPayment(payment: CardPaymentRecord) {
     if (!window.confirm("確定要取消這筆信用卡繳款紀錄嗎？")) return;
-    await deleteCardPaymentRecord(payment.id, payment.legacyInstallmentAdjustments ?? []);
-    await loadRecords();
+    await runMutation("取消信用卡繳款", () => deleteCardPaymentRecord(payment.id, payment.legacyInstallmentAdjustments ?? []));
   }
 
   function toggleCardDetails(key: string) {
@@ -595,7 +556,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
             <div className="row"><strong>{ownerLabel(owner as "chris" | "wife", viewer)}</strong><strong>{money(ownerRecords.reduce((sum, record) => sum + record.amount, 0))}</strong></div>
             {ownerRecords.map((record) => <div className="record-row" key={record.id}>
               <span className="record-title">{record.date.slice(5)}　{record.category}{record.note ? `・${record.note}` : ""}</span>
-              <span className="record-actions"><span className="muted">{money(record.amount)}</span><button className="btn secondary delete-btn" type="button" onClick={() => handleDeleteIncome(record.id)}>刪除</button></span>
+              <span className="record-actions"><span className="muted">{money(record.amount)}</span><button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteIncome(record.id)}>刪除</button></span>
             </div>)}
           </div>)}
         </div> : null}
@@ -623,7 +584,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
               </button>
               {isCategoryOpen ? <div className="grid">{categoryRecords.map((record) => <div className="record-row" key={record.id}>
                 <span className="record-title">{record.date.slice(5)}　{record.isPrivate ? "個人雜支" : record.note || record.category}</span>
-                <span className="record-actions"><span className="muted">{money(record.amount)}{record.creditCard ? `・${record.creditCard}` : ""}{record.target === "junyao" ? `・${displayPaidBy(record, viewer)}付` : ""}</span><button className="btn secondary delete-btn" type="button" onClick={() => handleDeleteExpense(record)}>刪除</button></span>
+                <span className="record-actions"><span className="muted">{money(record.amount)}{record.creditCard ? `・${record.creditCard}` : ""}{record.target === "junyao" ? `・${displayPaidBy(record, viewer)}付` : ""}</span><button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteExpense(record)}>刪除</button></span>
               </div>)}</div> : null}
             </div>;
           })}</div> : null}
@@ -641,7 +602,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
             <div className="row"><strong>{ownerLabel(owner as "chris" | "wife", viewer)}</strong><strong>{money(ownerRecords.reduce((sum, record) => sum + record.amount, 0))}</strong></div>
             {ownerRecords.map((record) => <div className="record-row" key={record.id}>
               <span className="record-title">{record.date.slice(5)}　{record.type}・{record.name}{record.note ? `・${record.note}` : ""}</span>
-              <span className="record-actions"><span className="muted">{money(record.amount)}</span><button className="btn secondary delete-btn" type="button" onClick={() => handleDeleteInvestment(record.id)}>刪除</button></span>
+              <span className="record-actions"><span className="muted">{money(record.amount)}</span><button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteInvestment(record.id)}>刪除</button></span>
             </div>)}
           </div>)}
         </div> : null}
@@ -680,9 +641,9 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
                 </div>
                 {paymentFee > 0 ? <div className="muted">刷卡合計 {money(cardTotal)}，他行扣款手續費 {money(paymentFee)}</div> : null}
                 {payment ? <div className="muted">繳款日：{payment.paidDate}・{money(payment.amount)}</div> : null}
-                {state === "due" ? <button className="btn" type="button" onClick={() => handleCreateCardPayment(card, cardTotal, dueBillMonth)}>建立繳款紀錄</button> : null}
+                {state === "due" ? <button className="btn" type="button" disabled={pendingAction !== null} onClick={() => handleCreateCardPayment(card, cardTotal, dueBillMonth)}>{pendingAction === "建立信用卡繳款" ? "建立中..." : "建立繳款紀錄"}</button> : null}
                 {state === "estimate" ? <button className="btn secondary" type="button" disabled>未結帳，先核對明細</button> : null}
-                {payment ? <button className="btn secondary" type="button" onClick={() => handleDeleteCardPayment(payment)}>取消繳款紀錄</button> : null}
+                {payment ? <button className="btn secondary" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteCardPayment(payment)}>取消繳款紀錄</button> : null}
                 <button className="btn secondary compact-btn" type="button" onClick={() => toggleCardDetails(detailKey)}>{isOpen ? "收合明細" : "查看明細"}</button>
                 {isOpen ? <div className="credit-card-lines">
                   {cardRecords.map((record, index) => <div className="credit-card-line" key={`${card}-${record.date}-${index}`}>
@@ -692,7 +653,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
                     </div>
                     <div className="credit-card-line-side">
                       <span>{money(record.amount)}</span>
-                      {record.sourceExpense?.installment?.enabled ? <button className="btn secondary delete-btn" type="button" onClick={() => record.sourceExpense ? handleUpdateInstallmentFirstBillMonth(record.sourceExpense) : undefined}>修改</button> : null}
+                      {record.sourceExpense?.installment?.enabled ? <button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => record.sourceExpense ? handleUpdateInstallmentFirstBillMonth(record.sourceExpense) : undefined}>修改</button> : null}
                     </div>
                   </div>)}
                 </div> : null}
@@ -737,7 +698,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
                     </div>
                     <div className="credit-card-line-side">
                       <span>{money(record.amount)}</span>
-                      {record.sourceExpense?.installment?.enabled ? <button className="btn secondary delete-btn" type="button" onClick={() => record.sourceExpense ? handleUpdateInstallmentFirstBillMonth(record.sourceExpense) : undefined}>修改</button> : null}
+                      {record.sourceExpense?.installment?.enabled ? <button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => record.sourceExpense ? handleUpdateInstallmentFirstBillMonth(record.sourceExpense) : undefined}>修改</button> : null}
                     </div>
                   </div>)}
                 </div> : null}
@@ -762,9 +723,9 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           <div className="row"><span>{record.date.slice(5)}　{record.item}{record.note ? `・${record.note}` : ""}</span><strong>{money(record.amount)}</strong></div>
           <div className="muted">{record.status}{record.creditCard ? `・${record.creditCard}` : ""}</div>
           <div className="row">
-            <button className="btn secondary" type="button" onClick={() => handleAdvanceStatus(record, "已送件")}>已送件</button>
-            <button className="btn secondary" type="button" onClick={() => handleAdvanceStatus(record, "已收回")}>已收回</button>
-            <button className="btn secondary" type="button" onClick={() => handleDeleteAdvance(record.id)}>刪除</button>
+            <button className="btn secondary" type="button" disabled={pendingAction !== null} onClick={() => handleAdvanceStatus(record, "已送件")}>已送件</button>
+            <button className="btn secondary" type="button" disabled={pendingAction !== null} onClick={() => handleAdvanceStatus(record, "已收回")}>已收回</button>
+            <button className="btn secondary" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteAdvance(record.id)}>刪除</button>
           </div>
         </div>)}</div> : null}
       </article> : null}

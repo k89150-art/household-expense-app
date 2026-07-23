@@ -1,4 +1,5 @@
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
+import { cardPaymentDocumentId } from "@/lib/cardBilling";
 import { db } from "@/lib/firebase";
 import { HOUSEHOLD_ID } from "@/lib/household";
 import { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
@@ -219,6 +220,18 @@ async function getRecordsByMonth<T extends DatedRecord>(collectionName: string, 
   return sortLatestFirst(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as T));
 }
 
+async function getRecordsByDateRange<T extends DatedRecord>(collectionName: string, startDate: string, endDate: string) {
+  const collectionRef = collection(db, "households", HOUSEHOLD_ID, collectionName);
+  const snapshot = await getDocs(query(
+    collectionRef,
+    where("householdId", "==", HOUSEHOLD_ID),
+    where("date", ">=", startDate),
+    where("date", "<=", endDate),
+    orderBy("date", "desc"),
+  ));
+  return sortLatestFirst(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as T));
+}
+
 async function getAllRecords<T extends DatedRecord>(collectionName: string) {
   const collectionRef = collection(db, "households", HOUSEHOLD_ID, collectionName);
   const snapshot = await getDocs(query(collectionRef, where("householdId", "==", HOUSEHOLD_ID), orderBy("date", "desc")));
@@ -325,6 +338,10 @@ export async function getAllAdvanceRecords() {
   return getAllRecords<AdvanceRecord>("advances");
 }
 
+export async function getAdvanceRecordsByDateRange(startDate: string, endDate: string) {
+  return getRecordsByDateRange<AdvanceRecord>("advances", startDate, endDate);
+}
+
 export async function updateAdvanceRecord(id: string, input: Partial<NewAdvanceInput>) {
   const docRef = doc(db, "households", HOUSEHOLD_ID, "advances", id);
   await updateDoc(docRef, removeUndefinedFields({ ...input, updatedAt: serverTimestamp() }));
@@ -343,13 +360,14 @@ type LegacyInstallmentStateChange = {
 };
 
 export async function addCardPaymentRecord(input: NewCardPaymentInput, installmentUpdates: LegacyInstallmentStateChange[] = []) {
+  const paymentId = cardPaymentDocumentId(input.owner, input.card, input.billMonth);
+  const paymentRef = doc(db, "households", HOUSEHOLD_ID, "cardPayments", paymentId);
   if (installmentUpdates.length === 0) {
-    await addRecord("cardPayments", input);
+    await setDoc(paymentRef, recordData(input));
     return;
   }
 
   const batch = writeBatch(db);
-  const paymentRef = doc(collection(db, "households", HOUSEHOLD_ID, "cardPayments"));
   batch.set(paymentRef, recordData(input));
   installmentUpdates.forEach(({ id, ...update }) => {
     const installmentRef = doc(db, "households", HOUSEHOLD_ID, "creditCardBills", id);
@@ -387,6 +405,17 @@ export async function deleteCardPaymentRecord(id: string, installmentRestores: L
     batch.update(installmentRef, removeUndefinedFields({ ...restore, updatedAt: serverTimestamp() }));
   });
   await batch.commit();
+}
+
+export async function getCardPaymentRecordsFromBillMonth(month: string) {
+  const collectionRef = collection(db, "households", HOUSEHOLD_ID, "cardPayments");
+  const snapshot = await getDocs(query(
+    collectionRef,
+    where("householdId", "==", HOUSEHOLD_ID),
+    where("billMonth", ">=", month),
+    orderBy("billMonth", "asc"),
+  ));
+  return sortLatestFirst(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as CardPaymentRecord));
 }
 
 export async function addLegacyInstallmentRecord(input: NewLegacyInstallmentInput) {
