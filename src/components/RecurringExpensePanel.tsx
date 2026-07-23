@@ -204,22 +204,46 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
     }
   }, [viewer, selectedItem]);
 
-  async function updateSelectedAmount(value: string) {
+  function updateSelectedAmount(value: string) {
     setAmountDraft(value);
+  }
+
+  async function saveSelectedAmount() {
     if (!selectedItem) return;
-    if (value.trim() === "") return;
-    const amount = Number(value);
-    if (!Number.isFinite(amount)) return;
+    if (amountDraft.trim() === "") {
+      setAmountDraft(String(selectedItem.amount));
+      return;
+    }
+    const amount = Number(amountDraft);
+    if (!Number.isFinite(amount) || amount < 0) {
+      setAmountDraft(String(selectedItem.amount));
+      setMessage("請輸入正確金額。");
+      return;
+    }
+    if (amount === selectedItem.amount) return;
     const updatedItem = { ...selectedItem, amount };
     setItems((current) => current.map((item) => item.id === selectedItem.id ? updatedItem : item));
-    if (user) await saveTemplateToCloud(updatedItem, user.uid);
+    try {
+      if (user) await saveTemplateToCloud(updatedItem, user.uid);
+    } catch (error) {
+      console.error(error);
+      setItems((current) => current.map((item) => item.id === selectedItem.id ? selectedItem : item));
+      setAmountDraft(String(selectedItem.amount));
+      setMessage("固定支出金額同步失敗，已保留原本設定。");
+    }
   }
 
   async function updateSelectedCreditCard(card: CreditCardName) {
     if (!selectedItem) return;
     const updatedItem = { ...selectedItem, creditCard: card };
     setItems((current) => current.map((item) => item.id === selectedItem.id ? updatedItem : item));
-    if (user) await saveTemplateToCloud(updatedItem, user.uid);
+    try {
+      if (user) await saveTemplateToCloud(updatedItem, user.uid);
+    } catch (error) {
+      console.error(error);
+      setItems((current) => current.map((item) => item.id === selectedItem.id ? selectedItem : item));
+      setMessage("信用卡設定同步失敗，已保留原本設定。");
+    }
   }
 
   async function deleteSelectedSubscription() {
@@ -227,11 +251,11 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
     const ok = window.confirm(`確定要刪除「${selectedItem.name}」這個訂閱模板嗎？`);
     if (!ok) return;
 
-    const remainingVisibleItems = visibleItems.filter((item) => item.id !== selectedItem.id);
-    setItems((current) => current.filter((item) => item.id !== selectedItem.id));
-    setSelectedId(remainingVisibleItems[0]?.id ?? "");
     try {
       if (user) await deleteRecurringExpenseTemplate(selectedItem.id);
+      const remainingVisibleItems = visibleItems.filter((item) => item.id !== selectedItem.id);
+      setItems((current) => current.filter((item) => item.id !== selectedItem.id));
+      setSelectedId(remainingVisibleItems[0]?.id ?? "");
       setMessage(`已刪除訂閱模板：${selectedItem.name}`);
     } catch (error) {
       console.error(error);
@@ -356,7 +380,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
           </div>
           <label className="field">
             <span>金額</span>
-            <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={amountDraft} onChange={(event) => updateSelectedAmount(event.target.value)} />
+            <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={amountDraft} onChange={(event) => updateSelectedAmount(event.target.value)} onBlur={saveSelectedAmount} />
           </label>
           {selectedItem.paymentMethod === "信用卡" && selectedItem.creditCard !== "保費卡" ? (
             <label className="field">

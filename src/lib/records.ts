@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { HOUSEHOLD_ID } from "@/lib/household";
 import { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
@@ -265,9 +265,18 @@ export async function updateExpenseRecord(id: string, input: Partial<NewExpenseI
   await updateDoc(docRef, removeUndefinedFields({ ...input, updatedAt: serverTimestamp() }));
 }
 
-export async function deleteExpenseRecord(id: string) {
-  const docRef = doc(db, "households", HOUSEHOLD_ID, "expenses", id);
-  await deleteDoc(docRef);
+export async function deleteExpenseRecord(id: string, ownerId: string) {
+  const expenseRef = doc(db, "households", HOUSEHOLD_ID, "expenses", id);
+  const privateDetailsRef = collection(db, "households", HOUSEHOLD_ID, "privateExpenseDetails");
+  const privateDetails = await getDocs(query(
+    privateDetailsRef,
+    where("ownerId", "==", ownerId),
+    where("expenseId", "==", id),
+  ));
+  const batch = writeBatch(db);
+  privateDetails.docs.forEach((detail) => batch.delete(detail.ref));
+  batch.delete(expenseRef);
+  await batch.commit();
 }
 
 export async function addIncomeRecord(input: NewIncomeInput) {
@@ -326,8 +335,27 @@ export async function deleteAdvanceRecord(id: string) {
   await deleteDoc(docRef);
 }
 
-export async function addCardPaymentRecord(input: NewCardPaymentInput) {
-  await addRecord("cardPayments", input);
+type LegacyInstallmentStateChange = {
+  id: string;
+  nextInstallmentNo?: number;
+  nextBillMonth?: string;
+  isActive?: boolean;
+};
+
+export async function addCardPaymentRecord(input: NewCardPaymentInput, installmentUpdates: LegacyInstallmentStateChange[] = []) {
+  if (installmentUpdates.length === 0) {
+    await addRecord("cardPayments", input);
+    return;
+  }
+
+  const batch = writeBatch(db);
+  const paymentRef = doc(collection(db, "households", HOUSEHOLD_ID, "cardPayments"));
+  batch.set(paymentRef, recordData(input));
+  installmentUpdates.forEach(({ id, ...update }) => {
+    const installmentRef = doc(db, "households", HOUSEHOLD_ID, "creditCardBills", id);
+    batch.update(installmentRef, removeUndefinedFields({ ...update, updatedAt: serverTimestamp() }));
+  });
+  await batch.commit();
 }
 
 export async function getCardPaymentRecordsByMonth(month: string) {
@@ -344,9 +372,21 @@ export async function getCardPaymentRecordsByBillMonth(month: string) {
   return sortLatestFirst(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as CardPaymentRecord));
 }
 
-export async function deleteCardPaymentRecord(id: string) {
-  const docRef = doc(db, "households", HOUSEHOLD_ID, "cardPayments", id);
-  await deleteDoc(docRef);
+export async function deleteCardPaymentRecord(id: string, installmentRestores: LegacyInstallmentStateChange[] = []) {
+  if (installmentRestores.length === 0) {
+    const docRef = doc(db, "households", HOUSEHOLD_ID, "cardPayments", id);
+    await deleteDoc(docRef);
+    return;
+  }
+
+  const batch = writeBatch(db);
+  const paymentRef = doc(db, "households", HOUSEHOLD_ID, "cardPayments", id);
+  batch.delete(paymentRef);
+  installmentRestores.forEach(({ id: installmentId, ...restore }) => {
+    const installmentRef = doc(db, "households", HOUSEHOLD_ID, "creditCardBills", installmentId);
+    batch.update(installmentRef, removeUndefinedFields({ ...restore, updatedAt: serverTimestamp() }));
+  });
+  await batch.commit();
 }
 
 export async function addLegacyInstallmentRecord(input: NewLegacyInstallmentInput) {
@@ -377,7 +417,11 @@ export async function getRecurringExpenseTemplates() {
 export async function upsertRecurringExpenseTemplate(input: NewRecurringExpenseTemplateInput) {
   const { id, ...template } = input;
   const docRef = doc(db, "households", HOUSEHOLD_ID, "recurringExpenses", id);
-  await setDoc(docRef, recordData(template), { merge: true });
+  const snapshot = await getDoc(docRef);
+  const data = snapshot.exists()
+    ? removeUndefinedFields({ ...template, householdId: HOUSEHOLD_ID, updatedAt: serverTimestamp() })
+    : recordData(template);
+  await setDoc(docRef, data, { merge: true });
 }
 
 export async function deleteRecurringExpenseTemplate(id: string) {

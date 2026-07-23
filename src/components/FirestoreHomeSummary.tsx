@@ -382,9 +382,17 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth, scope, refreshKey]);
 
-  async function handleDeleteExpense(id: string) {
+  async function handleDeleteExpense(record: ExpenseRecord) {
+    if (!user) {
+      setMessage("請先登入。");
+      return;
+    }
+    if (record.isPrivate && record.createdBy !== user.uid) {
+      setMessage("私人支出只能由建立這筆資料的人刪除。");
+      return;
+    }
     if (!window.confirm("確定要刪除這筆支出嗎？")) return;
-    await deleteExpenseRecord(id);
+    await deleteExpenseRecord(record.id, user.uid);
     await loadRecords();
   }
 
@@ -454,6 +462,10 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       nextBillMonth: record.nextBillMonth,
       isActive: record.isActive,
     }));
+    const legacyInstallmentUpdates = dueLegacyInstallments.map((record) => ({
+      id: record.id,
+      ...nextLegacyInstallmentState(record, billMonth),
+    }));
     await addCardPaymentRecord({
       date: localDateString(),
       amount: paymentAmount,
@@ -465,23 +477,13 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       note: `${billMonth} ${card}帳單繳款${fee > 0 ? `，含他行扣款手續費 ${fee} 元` : ""}`,
       legacyInstallmentAdjustments,
       createdBy: user.uid,
-    });
-    await Promise.all(dueLegacyInstallments.map((record) => {
-      return updateLegacyInstallmentRecord(record.id, nextLegacyInstallmentState(record, billMonth));
-    }));
+    }, legacyInstallmentUpdates);
     await loadRecords();
   }
 
   async function handleDeleteCardPayment(payment: CardPaymentRecord) {
     if (!window.confirm("確定要取消這筆信用卡繳款紀錄嗎？")) return;
-    await deleteCardPaymentRecord(payment.id);
-    await Promise.all((payment.legacyInstallmentAdjustments ?? []).map((adjustment) =>
-      updateLegacyInstallmentRecord(adjustment.id, {
-        nextInstallmentNo: adjustment.nextInstallmentNo,
-        nextBillMonth: adjustment.nextBillMonth,
-        isActive: adjustment.isActive,
-      })
-    ));
+    await deleteCardPaymentRecord(payment.id, payment.legacyInstallmentAdjustments ?? []);
     await loadRecords();
   }
 
@@ -621,7 +623,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
               </button>
               {isCategoryOpen ? <div className="grid">{categoryRecords.map((record) => <div className="record-row" key={record.id}>
                 <span className="record-title">{record.date.slice(5)}　{record.isPrivate ? "個人雜支" : record.note || record.category}</span>
-                <span className="record-actions"><span className="muted">{money(record.amount)}{record.creditCard ? `・${record.creditCard}` : ""}{record.target === "junyao" ? `・${displayPaidBy(record, viewer)}付` : ""}</span><button className="btn secondary delete-btn" type="button" onClick={() => handleDeleteExpense(record.id)}>刪除</button></span>
+                <span className="record-actions"><span className="muted">{money(record.amount)}{record.creditCard ? `・${record.creditCard}` : ""}{record.target === "junyao" ? `・${displayPaidBy(record, viewer)}付` : ""}</span><button className="btn secondary delete-btn" type="button" onClick={() => handleDeleteExpense(record)}>刪除</button></span>
               </div>)}</div> : null}
             </div>;
           })}</div> : null}
