@@ -1058,6 +1058,91 @@ textarea {
   display: none;
 }
 
+.record-kind-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  padding: 5px 8px;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  background: rgba(234, 220, 205, 0.48);
+  color: var(--espresso);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.record-kind-badge.income {
+  background: rgba(80, 126, 105, 0.12);
+  color: #315f4c;
+}
+
+.record-kind-badge.investment {
+  background: rgba(91, 64, 82, 0.12);
+  color: var(--fig);
+}
+
+.record-kind-badge.advance {
+  background: rgba(182, 111, 77, 0.12);
+  color: var(--copper-deep);
+}
+
+.record-kind-badge.cardPayment {
+  background: rgba(65, 86, 115, 0.12);
+  color: #415673;
+}
+
+.report-search-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(140px, 0.7fr));
+  gap: 10px;
+}
+
+.report-search-summary {
+  min-height: 42px;
+  padding-top: 8px;
+}
+
+.report-search-results {
+  display: grid;
+  max-height: 560px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.report-search-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 13px 0;
+  border-top: 1px solid var(--hair);
+}
+
+.report-search-row > div {
+  min-width: 0;
+}
+
+.report-search-row strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.report-search-row > div span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.report-search-row em {
+  color: var(--copper-deep);
+  font-style: normal;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
 @media (max-width: 520px) {
   .input,
   .select,
@@ -1073,6 +1158,23 @@ textarea {
     -webkit-appearance: none;
     padding-left: 8px;
     padding-right: 8px;
+  }
+
+  .report-search-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .report-search-keyword {
+    grid-column: 1 / -1;
+  }
+
+  .report-search-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .report-search-row em {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .month-picker {
@@ -1294,6 +1396,10 @@ textarea {
 
   .report-list:nth-of-type(6) {
     grid-column: span 7;
+  }
+
+  .report-list:last-child {
+    grid-column: 1 / -1;
   }
 
   .compose {
