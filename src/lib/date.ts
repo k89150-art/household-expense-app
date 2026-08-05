@@ -13,3 +13,8 @@ export function previousMonthDayString(day: number, date = new Date()) {
   const previousMonthDate = new Date(date.getFullYear(), date.getMonth() - 1, day);
   return localDateString(previousMonthDate);
 }
+
+export function previousMonthDayForMonth(month: string, day: number) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  return localDateString(new Date(year, monthNumber - 2, day));
+}

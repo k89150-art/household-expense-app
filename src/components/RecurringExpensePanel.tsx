@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
-import { previousMonthDayString } from "@/lib/date";
+import { currentMonthString, previousMonthDayForMonth } from "@/lib/date";
 import { addExpenseRecord, deleteRecurringExpenseTemplate, getExpenseRecordsByMonth, getRecurringExpenseTemplates, upsertRecurringExpenseTemplate } from "@/lib/records";
 import type { CreditCardName, OwnerKey, RecurringExpenseTemplateRecord } from "@/lib/records";
 import type { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
@@ -144,6 +144,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
   const [selectedId, setSelectedId] = useState("");
   const [amountDraft, setAmountDraft] = useState("");
   const [expenseDate, setExpenseDate] = useState(today());
+  const [insuranceBillMonth, setInsuranceBillMonth] = useState(currentMonthString());
   const [showSubscriptionForm, setShowSubscriptionForm] = useState(false);
   const [subscriptionName, setSubscriptionName] = useState("");
   const [subscriptionAmount, setSubscriptionAmount] = useState("");
@@ -202,7 +203,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
 
   const selectedItem = useMemo(() => visibleItems.find((item) => item.id === selectedId) ?? visibleItems[0], [selectedId, visibleItems]);
   const usesFixedInsuranceDate = selectedItem ? usesPreviousMonthInsuranceDate(selectedItem) : false;
-  const effectiveExpenseDate = usesFixedInsuranceDate ? previousMonthDayString(24) : expenseDate;
+  const effectiveExpenseDate = usesFixedInsuranceDate ? previousMonthDayForMonth(insuranceBillMonth, 24) : expenseDate;
 
   useEffect(() => {
     if (selectedItem) {
@@ -366,9 +367,13 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
       {isTemplateLoading ? <p className="muted" style={{ margin: 0 }}>正在同步固定支出模板...</p> : null}
 
       <label className="field">
-        <span>支出日期</span>
-        <input className="input" type="date" value={effectiveExpenseDate} disabled={usesFixedInsuranceDate} onChange={(event) => setExpenseDate(event.target.value)} />
-        {usesFixedInsuranceDate ? <small className="muted">保險刷卡日固定為前一個月 24 日，會歸入目前月份的信用卡帳單。</small> : null}
+        <span>{usesFixedInsuranceDate ? "帳單月份" : "支出日期"}</span>
+        {usesFixedInsuranceDate ? (
+          <input className="input" type="month" value={insuranceBillMonth} onChange={(event) => setInsuranceBillMonth(event.target.value)} />
+        ) : (
+          <input className="input" type="date" value={expenseDate} onChange={(event) => setExpenseDate(event.target.value)} />
+        )}
+        {usesFixedInsuranceDate ? <small className="muted">實際刷卡日固定為 {effectiveExpenseDate}，會歸入 {insuranceBillMonth} 的信用卡帳單。</small> : null}
       </label>
 
       <label className="field">
