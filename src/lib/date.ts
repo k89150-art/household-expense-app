@@ -8,3 +8,8 @@ export function localDateString(date = new Date()) {
 export function currentMonthString(date = new Date()) {
   return localDateString(date).slice(0, 7);
 }
+
+export function previousMonthDayString(day: number, date = new Date()) {
+  const previousMonthDate = new Date(date.getFullYear(), date.getMonth() - 1, day);
+  return localDateString(previousMonthDate);
+}

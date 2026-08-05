@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
+import { previousMonthDayString } from "@/lib/date";
 import { addExpenseRecord, deleteRecurringExpenseTemplate, getExpenseRecordsByMonth, getRecurringExpenseTemplates, upsertRecurringExpenseTemplate } from "@/lib/records";
 import type { CreditCardName, OwnerKey, RecurringExpenseTemplateRecord } from "@/lib/records";
 import type { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
@@ -55,6 +56,10 @@ function toExpenseCategory(item: RecurringItem): ExpenseCategory {
 
 function isSubscriptionItem(item: RecurringItem) {
   return item.category === "訂閱" || item.name.startsWith("訂閱：");
+}
+
+function usesPreviousMonthInsuranceDate(item: RecurringItem) {
+  return item.id === "insurance-self-chris" || item.id === "insurance-junyao";
 }
 
 const DEFAULT_ITEMS: RecurringItem[] = [
@@ -196,6 +201,8 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
   }, [user]);
 
   const selectedItem = useMemo(() => visibleItems.find((item) => item.id === selectedId) ?? visibleItems[0], [selectedId, visibleItems]);
+  const usesFixedInsuranceDate = selectedItem ? usesPreviousMonthInsuranceDate(selectedItem) : false;
+  const effectiveExpenseDate = usesFixedInsuranceDate ? previousMonthDayString(24) : expenseDate;
 
   useEffect(() => {
     if (selectedItem) {
@@ -278,10 +285,11 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
     const paymentMethod = toPaymentMethod(selectedItem);
     const category = toExpenseCategory(selectedItem);
     const target = toTarget(selectedItem.target, viewer);
+    const recordDate = effectiveExpenseDate;
     setIsSaving(true);
     setMessage("");
     try {
-      const existingExpenses = await getExpenseRecordsByMonth(expenseDate.slice(0, 7));
+      const existingExpenses = await getExpenseRecordsByMonth(recordDate.slice(0, 7));
       const duplicate = existingExpenses.find((record) =>
         record.note === selectedItem.name &&
         record.category === category &&
@@ -295,7 +303,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
         if (!duplicateOk) return;
       }
       await addExpenseRecord({
-        date: expenseDate,
+        date: recordDate,
         amount: selectedItem.amount,
         category,
         target,
@@ -306,7 +314,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
         isPrivate: false,
         createdBy: user.uid,
       });
-      setMessage(`已新增：${selectedItem.name}｜${category}｜${selectedItem.paymentMethod}${selectedItem.creditCard ? `・${selectedItem.creditCard}` : ""}｜$${selectedItem.amount.toLocaleString("zh-TW")}`);
+      setMessage(`已新增：${selectedItem.name}｜${recordDate}｜${category}｜${selectedItem.paymentMethod}${selectedItem.creditCard ? `・${selectedItem.creditCard}` : ""}｜$${selectedItem.amount.toLocaleString("zh-TW")}`);
     } catch (error) {
       console.error(error);
       setMessage("新增失敗，請確認 Firestore rules 或稍後再試。");
@@ -359,7 +367,8 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
 
       <label className="field">
         <span>支出日期</span>
-        <input className="input" type="date" value={expenseDate} onChange={(event) => setExpenseDate(event.target.value)} />
+        <input className="input" type="date" value={effectiveExpenseDate} disabled={usesFixedInsuranceDate} onChange={(event) => setExpenseDate(event.target.value)} />
+        {usesFixedInsuranceDate ? <small className="muted">保險刷卡日固定為前一個月 24 日，會歸入目前月份的信用卡帳單。</small> : null}
       </label>
 
       <label className="field">
