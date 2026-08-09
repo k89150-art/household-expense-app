@@ -609,6 +609,19 @@ textarea {
   gap: 10px;
 }
 
+.statement-amount-field {
+  padding: 12px 0 2px;
+  border-top: 1px solid var(--line);
+}
+
+.statement-amount-field .input {
+  font-variant-numeric: tabular-nums;
+}
+
+.statement-difference {
+  color: var(--danger);
+}
+
 .credit-card-meta {
   display: flex;
   flex-wrap: wrap;

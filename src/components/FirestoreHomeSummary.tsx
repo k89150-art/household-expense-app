@@ -262,6 +262,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [showCreditCards, setShowCreditCards] = useState(false);
   const [creditCardTab, setCreditCardTab] = useState<CreditCardTab>("unbilled");
   const [openedCardDetails, setOpenedCardDetails] = useState<Record<string, boolean>>({});
+  const [statementAmountDrafts, setStatementAmountDrafts] = useState<Record<string, string>>({});
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const mutationLockRef = useRef(false);
   const [message, setMessage] = useState("");
@@ -395,7 +396,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     }));
   }
 
-  async function handleCreateCardPayment(card: string, amount: number, billMonth: string) {
+  async function handleCreateCardPayment(card: string, statementAmount: number, systemAmount: number, billMonth: string) {
     if (!user) {
       setMessage("請先登入。");
       return;
@@ -410,9 +411,11 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       return;
     }
     const fee = cardPaymentFee(typedCard);
-    const paymentAmount = amount + fee;
+    const paymentAmount = statementAmount + fee;
+    const difference = statementAmount - systemAmount;
     const feeText = fee > 0 ? `（含他行扣款手續費 ${money(fee)}）` : "";
-    if (!window.confirm(`確定要建立 ${card} ${billMonth} 帳單繳款 ${money(paymentAmount)} ${feeText}嗎？`)) return;
+    const differenceText = difference === 0 ? "與系統明細相符" : `與系統明細相差 ${money(difference)}`;
+    if (!window.confirm(`確定要建立 ${card} ${billMonth} 帳單繳款 ${money(paymentAmount)} ${feeText}嗎？\n實際帳單 ${money(statementAmount)}，${differenceText}。`)) return;
     const dueLegacyInstallments = legacyInstallments.filter((record) =>
       record.isActive &&
       (record.owner ?? "chris") === viewer &&
@@ -437,7 +440,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       billMonth,
       status: "已繳款",
       paidDate: localDateString(),
-      note: `${billMonth} ${card}帳單繳款${fee > 0 ? `，含他行扣款手續費 ${fee} 元` : ""}`,
+      note: `${billMonth} ${card}帳單繳款；系統明細 ${systemAmount} 元，實際帳單 ${statementAmount} 元，差額 ${difference} 元${fee > 0 ? `，另含他行扣款手續費 ${fee} 元` : ""}`,
       legacyInstallmentAdjustments,
       createdBy: user.uid,
     }, legacyInstallmentUpdates));
@@ -495,7 +498,13 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   }), [dueCreditCardGroups, ownDueBillPayments, dueBillMonth]);
   const dueCreditCardTotal = dueCardSummaries
     .filter((item) => item.state !== "paid")
-    .reduce((sum, item) => sum + item.cardTotal + cardPaymentFee(item.card), 0);
+    .reduce((sum, item) => {
+      const draftAmount = Number(statementAmountDrafts[`due-${item.card}`]);
+      const reconciledAmount = item.state === "due" && Number.isInteger(draftAmount) && draftAmount > 0
+        ? draftAmount
+        : item.cardTotal;
+      return sum + reconciledAmount + cardPaymentFee(item.card);
+    }, 0);
   const dueCardCount = dueCardSummaries.filter((item) => item.state === "due").length;
   const estimatedCardCount = dueCardSummaries.filter((item) => item.state === "estimate").length;
 
@@ -628,7 +637,11 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
               const detailKey = `due-${card}`;
               const isOpen = Boolean(openedCardDetails[detailKey]);
               const paymentFee = cardPaymentFee(card);
-              const payableTotal = cardTotal + paymentFee;
+              const statementAmountDraft = statementAmountDrafts[detailKey] ?? String(cardTotal);
+              const statementAmount = Number(statementAmountDraft);
+              const hasValidStatementAmount = Number.isInteger(statementAmount) && statementAmount > 0;
+              const statementDifference = hasValidStatementAmount ? statementAmount - cardTotal : 0;
+              const payableTotal = (state === "due" && hasValidStatementAmount ? statementAmount : cardTotal) + paymentFee;
               return <div className="card credit-card-summary grid" style={{ boxShadow: "none" }} key={detailKey}>
                 <div className="row">
                   <div><strong>{card}</strong><div className="muted">{cardRecords.length} 筆明細</div></div>
@@ -641,7 +654,24 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
                 </div>
                 {paymentFee > 0 ? <div className="muted">刷卡合計 {money(cardTotal)}，他行扣款手續費 {money(paymentFee)}</div> : null}
                 {payment ? <div className="muted">繳款日：{payment.paidDate}・{money(payment.amount)}</div> : null}
-                {state === "due" ? <button className="btn" type="button" disabled={pendingAction !== null} onClick={() => handleCreateCardPayment(card, cardTotal, dueBillMonth)}>{pendingAction === "建立信用卡繳款" ? "建立中..." : "建立繳款紀錄"}</button> : null}
+                {state === "due" ? <label className="field statement-amount-field">
+                  <span>實際帳單金額</span>
+                  <input
+                    aria-label={`${card}實際帳單金額`}
+                    className="input"
+                    inputMode="numeric"
+                    min="1"
+                    pattern="[0-9]*"
+                    step="1"
+                    type="number"
+                    value={statementAmountDraft}
+                    onChange={(event) => setStatementAmountDrafts((current) => ({ ...current, [detailKey]: event.target.value }))}
+                  />
+                  <small className={statementDifference === 0 ? "muted" : "statement-difference"}>
+                    系統明細 {money(cardTotal)}{hasValidStatementAmount ? statementDifference === 0 ? "・金額相符" : `・差額 ${money(statementDifference)}` : "・請輸入有效金額"}
+                  </small>
+                </label> : null}
+                {state === "due" ? <button className="btn" type="button" disabled={pendingAction !== null || !hasValidStatementAmount} onClick={() => handleCreateCardPayment(card, statementAmount, cardTotal, dueBillMonth)}>{pendingAction === "建立信用卡繳款" ? "建立中..." : "建立繳款紀錄"}</button> : null}
                 {state === "estimate" ? <button className="btn secondary" type="button" disabled>未結帳，先核對明細</button> : null}
                 {payment ? <button className="btn secondary" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteCardPayment(payment)}>取消繳款紀錄</button> : null}
                 <button className="btn secondary compact-btn" type="button" onClick={() => toggleCardDetails(detailKey)}>{isOpen ? "收合明細" : "查看明細"}</button>
