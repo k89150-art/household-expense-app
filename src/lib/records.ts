@@ -263,6 +263,10 @@ export async function getExpenseRecordsByMonth(month: string) {
   return getRecordsByMonth<ExpenseRecord>("expenses", month);
 }
 
+export async function getExpenseRecordsByDateRange(startDate: string, endDate: string) {
+  return getRecordsByDateRange<ExpenseRecord>("expenses", startDate, endDate);
+}
+
 export async function getAllExpenseRecords() {
   return getAllRecords<ExpenseRecord>("expenses");
 }
@@ -300,6 +304,10 @@ export async function getIncomeRecordsByMonth(month: string) {
   return getRecordsByMonth<IncomeRecord>("incomes", month);
 }
 
+export async function getIncomeRecordsByDateRange(startDate: string, endDate: string) {
+  return getRecordsByDateRange<IncomeRecord>("incomes", startDate, endDate);
+}
+
 export async function getAllIncomeRecords() {
   return getAllRecords<IncomeRecord>("incomes");
 }
@@ -315,6 +323,10 @@ export async function addInvestmentRecord(input: NewInvestmentInput) {
 
 export async function getInvestmentRecordsByMonth(month: string) {
   return getRecordsByMonth<InvestmentRecord>("investments", month);
+}
+
+export async function getInvestmentRecordsByDateRange(startDate: string, endDate: string) {
+  return getRecordsByDateRange<InvestmentRecord>("investments", startDate, endDate);
 }
 
 export async function getAllInvestmentRecords() {
@@ -378,6 +390,10 @@ export async function addCardPaymentRecord(input: NewCardPaymentInput, installme
 
 export async function getCardPaymentRecordsByMonth(month: string) {
   return getRecordsByMonth<CardPaymentRecord>("cardPayments", month);
+}
+
+export async function getCardPaymentRecordsByDateRange(startDate: string, endDate: string) {
+  return getRecordsByDateRange<CardPaymentRecord>("cardPayments", startDate, endDate);
 }
 
 export async function getAllCardPaymentRecords() {
