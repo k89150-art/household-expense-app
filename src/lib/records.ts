@@ -79,7 +79,7 @@ export type AdvanceRecord = {
   status: "待核銷" | "已送件" | "已收回";
   paymentMethod: PaymentMethod;
   creditCard?: CreditCardName;
-  reimbursedDate?: string;
+  reimbursedDate?: string | null;
   note?: string;
   createdBy: string;
   createdAt?: unknown;

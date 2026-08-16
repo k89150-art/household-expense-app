@@ -884,6 +884,66 @@ textarea {
   white-space: nowrap;
 }
 
+.advance-history {
+  align-content: start;
+}
+
+.advance-month-group {
+  border-top: 1px solid var(--hair);
+  padding-top: 12px;
+}
+
+.advance-month-group summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  color: var(--espresso);
+}
+
+.advance-month-group summary span,
+.advance-history-row span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.advance-history-list {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.advance-history-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--hair);
+}
+
+.advance-history-row > div:first-child,
+.advance-history-side {
+  display: grid;
+  gap: 4px;
+}
+
+.advance-history-side {
+  justify-items: end;
+  align-content: start;
+}
+
+@media (max-width: 520px) {
+  .advance-history-row {
+    grid-template-columns: 1fr;
+  }
+
+  .advance-history-side {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    justify-items: start;
+  }
+}
+
 .scrim {
   position: fixed;
   inset: 0;
@@ -1407,12 +1467,16 @@ textarea {
     grid-column: span 7;
   }
 
-  .report-list:nth-of-type(5) {
+  .report-list.report-payer {
     grid-column: span 5;
   }
 
-  .report-list:nth-of-type(6) {
+  .report-list.report-credit-card {
     grid-column: span 7;
+  }
+
+  .report-list.advance-history {
+    grid-column: 1 / -1;
   }
 
   .report-list:last-child {

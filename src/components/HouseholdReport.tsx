@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { advanceReimbursementDate, reimbursedAdvancesForPeriod } from "@/lib/advanceCashFlow";
 import { currentMonthString } from "@/lib/date";
 import {
-  getAdvanceRecordsByDateRange,
-  getAdvanceRecordsByMonth,
+  getAllAdvanceRecords,
   getCardPaymentRecordsByDateRange,
   getCardPaymentRecordsByMonth,
   getExpenseRecordsByDateRange,
@@ -13,6 +13,7 @@ import {
   getIncomeRecordsByMonth,
   getInvestmentRecordsByDateRange,
   getInvestmentRecordsByMonth,
+  updateAdvanceRecord,
 } from "@/lib/records";
 import type { AdvanceRecord, CardPaymentRecord, ExpenseRecord, IncomeRecord, InvestmentRecord } from "@/lib/records";
 
@@ -87,12 +88,15 @@ export function HouseholdReport() {
   const [incomes, setIncomes] = useState<IncomeRecord[]>([]);
   const [investments, setInvestments] = useState<InvestmentRecord[]>([]);
   const [advances, setAdvances] = useState<AdvanceRecord[]>([]);
+  const [reimbursements, setReimbursements] = useState<AdvanceRecord[]>([]);
   const [cardPayments, setCardPayments] = useState<CardPaymentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [keyword, setKeyword] = useState("");
   const [searchKind, setSearchKind] = useState<SearchKind>("all");
   const [searchOwner, setSearchOwner] = useState<SearchOwner>("all");
+  const [reportRefreshKey, setReportRefreshKey] = useState(0);
+  const [updatingAdvanceId, setUpdatingAdvanceId] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadReport() {
@@ -102,17 +106,18 @@ export function HouseholdReport() {
         const selectedYear = selectedMonth.slice(0, 4);
         const startDate = `${selectedYear}-01-01`;
         const endDate = `${selectedYear}-12-31`;
-        const [expenseData, incomeData, investmentData, advanceData, cardPaymentData] = await Promise.all([
+        const [expenseData, incomeData, investmentData, allAdvanceData, cardPaymentData] = await Promise.all([
           reportScope === "month" ? getExpenseRecordsByMonth(selectedMonth) : getExpenseRecordsByDateRange(startDate, endDate),
           reportScope === "month" ? getIncomeRecordsByMonth(selectedMonth) : getIncomeRecordsByDateRange(startDate, endDate),
           reportScope === "month" ? getInvestmentRecordsByMonth(selectedMonth) : getInvestmentRecordsByDateRange(startDate, endDate),
-          reportScope === "month" ? getAdvanceRecordsByMonth(selectedMonth) : getAdvanceRecordsByDateRange(startDate, endDate),
+          getAllAdvanceRecords(),
           reportScope === "month" ? getCardPaymentRecordsByMonth(selectedMonth) : getCardPaymentRecordsByDateRange(startDate, endDate),
         ]);
         setExpenses(expenseData);
         setIncomes(incomeData);
         setInvestments(investmentData);
-        setAdvances(advanceData);
+        setAdvances(allAdvanceData.filter((record) => record.date >= (reportScope === "month" ? `${selectedMonth}-01` : startDate) && record.date <= (reportScope === "month" ? `${selectedMonth}-31` : endDate)));
+        setReimbursements(reimbursedAdvancesForPeriod(allAdvanceData, reportScope === "month" ? `${selectedMonth}-01` : startDate, reportScope === "month" ? `${selectedMonth}-31` : endDate));
         setCardPayments(cardPaymentData);
       } catch (error) {
         console.error(error);
@@ -123,14 +128,14 @@ export function HouseholdReport() {
     }
 
     loadReport();
-  }, [reportScope, selectedMonth]);
+  }, [reportRefreshKey, reportScope, selectedMonth]);
 
   const report = useMemo(() => {
     const livingExpense = sum(expenses.filter((record) => record.paymentMethod !== "credit_card"));
     const creditCardExpense = sum(expenses.filter((record) => record.paymentMethod === "credit_card"));
     const advanceTotal = sum(advances);
     const paidNowAdvance = sum(advances.filter((record) => record.paymentMethod !== "credit_card"));
-    const reimbursedAdvance = sum(advances.filter((record) => record.status === "已收回"));
+    const reimbursedAdvance = sum(reimbursements);
     const cardPaymentTotal = sum(cardPayments);
     const incomeTotal = sum(incomes);
     const investmentTotal = sum(investments);
@@ -157,7 +162,22 @@ export function HouseholdReport() {
       payerLines,
       creditCardLines,
     };
-  }, [advances, cardPayments, expenses, incomes, investments]);
+  }, [advances, cardPayments, expenses, incomes, investments, reimbursements]);
+
+  async function handleUndoAdvanceReimbursement(record: AdvanceRecord) {
+    if (!window.confirm(`確定要把「${record.item}」改回已送件，並取消這筆收回款嗎？`)) return;
+    setUpdatingAdvanceId(record.id);
+    setMessage("");
+    try {
+      await updateAdvanceRecord(record.id, { status: "已送件", reimbursedDate: null });
+      setReportRefreshKey((value) => value + 1);
+    } catch (error) {
+      console.error(error);
+      setMessage("取消代墊款收回失敗，請稍後再試。");
+    } finally {
+      setUpdatingAdvanceId(null);
+    }
+  }
 
   const searchRecords = useMemo<SearchRecord[]>(() => {
     const expenseRecords: SearchRecord[] = expenses.map((record) => {
@@ -239,6 +259,11 @@ export function HouseholdReport() {
   const periodNoun = reportScope === "month" ? "這個月" : "這一年";
   const periodSearchLabel = reportScope === "month" ? "目前月份" : `${selectedYear}年度`;
   const yearOptions = Array.from({ length: 11 }, (_, index) => Number(selectedYear) + 5 - index);
+  const advanceMonthGroups = Object.entries(advances.reduce<Record<string, AdvanceRecord[]>>((groups, record) => {
+    const month = record.date.slice(0, 7);
+    groups[month] = [...(groups[month] ?? []), record];
+    return groups;
+  }, {})).sort(([monthA], [monthB]) => monthB.localeCompare(monthA));
 
   return (
     <section className="report-page grid">
@@ -309,7 +334,42 @@ export function HouseholdReport() {
         ))}
       </article>
 
-      <article className="panel report-list">
+      <article className="panel report-list advance-history">
+        <div className="journal-head compact">
+          <div>
+            <h2>代墊款紀錄</h2>
+            <p>依代墊月份保留完整紀錄；收回款只計入實際收回月份的現金流。</p>
+          </div>
+        </div>
+        {advanceMonthGroups.length === 0 ? <p className="muted">{periodNoun}還沒有代墊款紀錄。</p> : null}
+        {advanceMonthGroups.map(([month, monthRecords], index) => (
+          <details className="advance-month-group" key={month} open={reportScope === "month" || index === 0}>
+            <summary>
+              <strong>{monthTitle(month)}</strong>
+              <span>{monthRecords.length} 筆・{money(sum(monthRecords))}</span>
+            </summary>
+            <div className="advance-history-list">
+              {monthRecords.map((record) => {
+                const reimbursementDate = advanceReimbursementDate(record);
+                return <div className="advance-history-row" key={record.id}>
+                  <div>
+                    <strong>{record.item}</strong>
+                    <span>{record.date}・{record.owner === "chris" ? "先生" : "太太"}・{record.paymentMethod}{record.creditCard ? `・${record.creditCard}` : ""}</span>
+                    {record.note ? <span>{record.note}</span> : null}
+                    <span>{record.status}{reimbursementDate ? `・${reimbursementDate} 收回` : ""}</span>
+                  </div>
+                  <div className="advance-history-side">
+                    <strong>{money(record.amount)}</strong>
+                    {record.status === "已收回" ? <button className="btn secondary compact-btn" type="button" disabled={updatingAdvanceId !== null} onClick={() => handleUndoAdvanceReimbursement(record)}>{updatingAdvanceId === record.id ? "處理中..." : "改回已送件"}</button> : null}
+                  </div>
+                </div>;
+              })}
+            </div>
+          </details>
+        ))}
+      </article>
+
+      <article className="panel report-list report-payer">
         <div className="journal-head compact">
           <div>
             <h2>付款分布</h2>
@@ -325,7 +385,7 @@ export function HouseholdReport() {
         ))}
       </article>
 
-      <article className="panel report-list">
+      <article className="panel report-list report-credit-card">
         <div className="journal-head compact">
           <div>
             <h2>信用卡分布</h2>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
+import { reimbursedAdvancesForPeriod } from "@/lib/advanceCashFlow";
 import { cardActivityRange, cardStatementLabel, isInCardStatement, monthDiff, monthLabel, nextLegacyInstallmentState, shiftMonth, statementRangeForCard } from "@/lib/cardBilling";
 import { currentMonthString, localDateString } from "@/lib/date";
 import {
@@ -16,8 +17,6 @@ import {
   getAllExpenseRecords,
   getAllIncomeRecords,
   getAllInvestmentRecords,
-  getAdvanceRecordsByDateRange,
-  getAdvanceRecordsByMonth,
   getCardPaymentRecordsByBillMonth,
   getCardPaymentRecordsFromBillMonth,
   getCardPaymentRecordsByMonth,
@@ -248,6 +247,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [incomes, setIncomes] = useState<IncomeRecord[]>([]);
   const [investments, setInvestments] = useState<InvestmentRecord[]>([]);
   const [advances, setAdvances] = useState<AdvanceRecord[]>([]);
+  const [allAdvances, setAllAdvances] = useState<AdvanceRecord[]>([]);
   const [dueAdvances, setDueAdvances] = useState<AdvanceRecord[]>([]);
   const [allCreditCardExpenses, setAllCreditCardExpenses] = useState<ExpenseRecord[]>([]);
   const [cardPayments, setCardPayments] = useState<CardPaymentRecord[]>([]);
@@ -273,12 +273,11 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     try {
       const dueBillMonth = shiftMonth(selectedMonth, -1);
       const activityRange = cardActivityRange([dueBillMonth, selectedMonth]);
-      const [expenseData, incomeData, investmentData, advanceData, dueAdvanceData, allCardExpenseData, paymentData, duePaymentData, legacyInstallmentData] = await Promise.all([
+      const [expenseData, incomeData, investmentData, allAdvanceData, allCardExpenseData, paymentData, duePaymentData, legacyInstallmentData] = await Promise.all([
         scope === "month" ? getExpenseRecordsByMonth(selectedMonth) : getAllExpenseRecords(),
         scope === "month" ? getIncomeRecordsByMonth(selectedMonth) : getAllIncomeRecords(),
         scope === "month" ? getInvestmentRecordsByMonth(selectedMonth) : getAllInvestmentRecords(),
-        scope === "month" ? getAdvanceRecordsByMonth(selectedMonth) : getAllAdvanceRecords(),
-        getAdvanceRecordsByDateRange(activityRange.startDate, activityRange.endDate),
+        getAllAdvanceRecords(),
         getCreditCardExpenseRecords(),
         scope === "month" ? getCardPaymentRecordsByMonth(selectedMonth) : getAllCardPaymentRecords(),
         getCardPaymentRecordsByBillMonth(dueBillMonth),
@@ -305,8 +304,9 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       setExpenses(expenseData);
       setIncomes(incomeData);
       setInvestments(investmentData);
-      setAdvances(advanceData);
-      setDueAdvances(dueAdvanceData);
+      setAdvances(scope === "month" ? allAdvanceData.filter((record) => record.date.startsWith(selectedMonth)) : allAdvanceData);
+      setAllAdvances(allAdvanceData);
+      setDueAdvances(allAdvanceData.filter((record) => record.date >= activityRange.startDate && record.date <= activityRange.endDate));
       setAllCreditCardExpenses(allCardExpenseData);
       setCardPayments(paymentData);
       setDueBillPayments(duePaymentData);
@@ -373,7 +373,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     if (!window.confirm(`確定要把「${record.item}」改成${status}嗎？`)) return;
     await runMutation("更新代墊款狀態", () => updateAdvanceRecord(record.id, {
       status,
-      reimbursedDate: status === "已收回" ? localDateString() : undefined,
+      reimbursedDate: status === "已收回" ? localDateString() : null,
     }));
   }
 
@@ -462,7 +462,10 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const pendingAdvanceRecords = advances.filter((record) => record.status !== "已收回");
   const paidNowAdvance = advances.filter((record) => record.paymentMethod !== "credit_card").reduce((sum, record) => sum + record.amount, 0);
   const pendingAdvance = pendingAdvanceRecords.reduce((sum, record) => sum + record.amount, 0);
-  const reimbursedAdvance = advances.filter((record) => record.status === "已收回").reduce((sum, record) => sum + record.amount, 0);
+  const reimbursementRecords = scope === "month"
+    ? reimbursedAdvancesForPeriod(allAdvances, `${selectedMonth}-01`, `${selectedMonth}-31`)
+    : allAdvances.filter((record) => record.status === "已收回");
+  const reimbursedAdvance = reimbursementRecords.reduce((sum, record) => sum + record.amount, 0);
   const totalCardPayment = cardPayments.reduce((sum, record) => sum + record.amount, 0);
   const ownCardPayments = useMemo(() => cardPayments.filter((record) => record.owner === viewer), [cardPayments, viewer]);
   const ownDueBillPayments = useMemo(() => dueBillPayments.filter((record) => record.owner === viewer), [dueBillPayments, viewer]);
@@ -472,7 +475,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const ownPaidNowExpense = expenses.filter((record) => record.paymentMethod !== "credit_card" && record.paidBy === viewer).reduce((sum, record) => sum + record.amount, 0);
   const ownInvestment = investments.filter((record) => record.owner === viewer).reduce((sum, record) => sum + record.amount, 0);
   const ownPaidNowAdvance = advances.filter((record) => record.paymentMethod !== "credit_card" && record.owner === viewer).reduce((sum, record) => sum + record.amount, 0);
-  const ownReimbursedAdvance = advances.filter((record) => record.owner === viewer && record.status === "已收回").reduce((sum, record) => sum + record.amount, 0);
+  const ownReimbursedAdvance = reimbursementRecords.filter((record) => record.owner === viewer).reduce((sum, record) => sum + record.amount, 0);
   const cardPaymentTotal = ownCardPayments.reduce((sum, record) => sum + record.amount, 0);
   const advanceCashFlow = paidNowAdvance - reimbursedAdvance;
   const familyAvailableBalance = totalIncome - paidNowExpense - paidNowAdvance - totalCardPayment - totalInvestment + reimbursedAdvance;
