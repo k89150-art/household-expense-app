@@ -6,14 +6,14 @@ import { localDateString } from "@/lib/date";
 import { Viewer, getViewerByEmail } from "@/lib/household";
 import { addIncomeRecord } from "@/lib/records";
 
-type IncomeType = "本薪" | "獎勵金" | "加班費" | "年終" | "生活費轉入" | "其他";
+type IncomeType = "本薪" | "獎勵金" | "加班費" | "值班費" | "衛福部津貼" | "年終獎金" | "生活費轉入" | "其他";
 
 type Props = {
   viewer?: Viewer;
   onSaved?: () => void;
 };
 
-const INCOME_TYPES: IncomeType[] = ["本薪", "獎勵金", "加班費", "年終", "生活費轉入", "其他"];
+const INCOME_TYPES: IncomeType[] = ["本薪", "獎勵金", "加班費", "值班費", "衛福部津貼", "年終獎金", "生活費轉入", "其他"];
 
 export function IncomeForm({ viewer, onSaved }: Props) {
   const user = useCurrentUser();
@@ -79,10 +79,11 @@ export function IncomeForm({ viewer, onSaved }: Props) {
       </label>
       <label className="field">
         <span>備註</span>
-        <input className="input" value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如 6 月本薪、獎勵金、夜班費" />
+        <input className="input" value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如 6 月本薪、值班費、衛福部津貼" />
       </label>
       <button className="btn" type="button" onClick={handleSave} disabled={isSaving}>{isSaving ? "儲存中..." : "儲存收入"}</button>
       {message ? <p className="muted">{message}</p> : null}
     </section>
   );
 }
+
