@@ -47,7 +47,7 @@ export type IncomeRecord = {
   date: string;
   amount: number;
   owner: OwnerKey;
-  category: "本薪" | "獎勵金" | "加班費" | "年終" | "生活費轉入" | "其他";
+  category: "本薪" | "獎勵金" | "加班費" | "值班費" | "衛福部津貼" | "年終" | "年終獎金" | "生活費轉入" | "其他";
   note?: string;
   createdBy: string;
   createdAt?: unknown;
@@ -473,3 +473,4 @@ export async function deleteRecurringExpenseTemplate(id: string) {
   const docRef = doc(db, "households", HOUSEHOLD_ID, "recurringExpenses", id);
   await deleteDoc(docRef);
 }
+
