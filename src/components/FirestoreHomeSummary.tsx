@@ -521,11 +521,36 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const activeLegacyInstallments = useMemo(() => legacyInstallments.filter((record) => record.isActive && (record.owner ?? "chris") === viewer), [legacyInstallments, viewer]);
   const creditCardGroups = useMemo(() => groupDueCreditCardBills(ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, selectedMonth), [ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, selectedMonth]);
   const dueCreditCardGroups = useMemo(() => groupDueCreditCardBills(ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, dueBillMonth), [ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, dueBillMonth]);
-  const dueCardSummaries = useMemo(() => Object.entries(dueCreditCardGroups).map(([card, cardRecords]) => {
+  const dueCardSummaries = useMemo(() => {
+    const cards = Array.from(new Set([
+      ...Object.keys(dueCreditCardGroups),
+      ...ownDueBillPayments.map((payment) => payment.card),
+    ]));
+    return cards.map((card) => {
     const typedCard = card as CreditCardName;
+    const currentCardRecords = dueCreditCardGroups[card] ?? [];
     const payment = ownDueBillPayments.find((item) => item.card === typedCard);
     const isPaid = Boolean(payment);
     const isClosed = isCardStatementClosed(typedCard, dueBillMonth);
+    const historicalInstallments: CardLine[] = payment ? paidLegacyInstallments(payment, legacyInstallments).map((record) => ({
+      date: `${dueBillMonth}-01`,
+      label: `${record.name}・記帳前分期 ${record.installmentNo}/${record.totalInstallments}`,
+      amount: record.amount,
+      kind: "legacyInstallment",
+    })) : [];
+    const recordedCardRecords = [...currentCardRecords, ...historicalInstallments];
+    const recordedTotal = recordedCardRecords.reduce((sum, record) => sum + record.amount, 0);
+    const paymentFee = cardPaymentFee(typedCard);
+    const adjustment = payment ? payment.amount - recordedTotal - paymentFee : 0;
+    const cardRecords: CardLine[] = adjustment !== 0 ? [
+      ...recordedCardRecords,
+      {
+        date: payment?.paidDate ?? `${dueBillMonth}-01`,
+        label: "實際帳單調整差額",
+        amount: adjustment,
+        kind: "expense",
+      },
+    ] : recordedCardRecords;
     return {
       card: typedCard,
       cardRecords,
@@ -533,7 +558,8 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       payment,
       state: isPaid ? "paid" as const : isClosed ? "due" as const : "estimate" as const,
     };
-  }), [dueCreditCardGroups, ownDueBillPayments, dueBillMonth]);
+  });
+  }, [dueCreditCardGroups, ownDueBillPayments, dueBillMonth, legacyInstallments]);
   const dueCreditCardTotal = dueCardSummaries
     .filter((item) => item.state !== "paid")
     .reduce((sum, item) => {
