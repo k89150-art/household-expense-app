@@ -678,6 +678,30 @@ textarea {
   white-space: nowrap;
 }
 
+.installment-month-editor {
+  display: grid;
+  grid-template-columns: minmax(112px, 1fr) auto auto;
+  gap: 6px;
+  align-items: center;
+  white-space: normal;
+}
+
+.installment-month-editor .input {
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+}
+
+@media (max-width: 640px) {
+  .installment-month-editor {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .installment-month-editor .input {
+    grid-column: 1 / -1;
+  }
+}
+
 .journal-head.compact {
   display: grid;
   grid-template-columns: 1fr;
@@ -1505,3 +1529,4 @@ textarea {
     background: rgba(34, 27, 24, 0.08);
   }
 }
+
