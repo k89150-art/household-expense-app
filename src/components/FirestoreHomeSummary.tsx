@@ -101,6 +101,21 @@ function legacyInstallmentDisplay(record: LegacyInstallmentRecord, billMonth: st
   };
 }
 
+function paidLegacyInstallments(payment: CardPaymentRecord, records: LegacyInstallmentRecord[]) {
+  return (payment.legacyInstallmentAdjustments ?? []).flatMap((adjustment) => {
+    const record = records.find((item) => item.id === adjustment.id);
+    if (!record) return [];
+    return [{
+      id: record.id,
+      name: record.name,
+      amount: record.amount,
+      installmentNo: adjustment.nextInstallmentNo,
+      totalInstallments: record.totalInstallments,
+      isFinal: adjustment.nextInstallmentNo >= record.totalInstallments,
+    }];
+  });
+}
+
 function matchingPaidBillMonths(record: LegacyInstallmentRecord, payments: CardPaymentRecord[], viewer: Viewer) {
   return payments
     .filter((payment) =>
@@ -483,8 +498,8 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const groupedTargets = useMemo(() => groupByTarget(expenses), [expenses]);
   const groupedIncomes = useMemo(() => groupByOwner(incomes), [incomes]);
   const groupedInvestments = useMemo(() => groupByOwner(investments), [investments]);
-  const creditCardGroups = useMemo(() => groupDueCreditCardBills(ownDueAdvances, ownCreditCardExpenses, [], selectedMonth), [ownDueAdvances, ownCreditCardExpenses, selectedMonth]);
   const activeLegacyInstallments = useMemo(() => legacyInstallments.filter((record) => record.isActive && (record.owner ?? "chris") === viewer), [legacyInstallments, viewer]);
+  const creditCardGroups = useMemo(() => groupDueCreditCardBills(ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, selectedMonth), [ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, selectedMonth]);
   const dueCreditCardGroups = useMemo(() => groupDueCreditCardBills(ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, dueBillMonth), [ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, dueBillMonth]);
   const dueCardSummaries = useMemo(() => Object.entries(dueCreditCardGroups).map(([card, cardRecords]) => {
     const typedCard = card as CreditCardName;
@@ -742,7 +757,22 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           {creditCardTab === "paid" ? <div className="card grid" style={{ boxShadow: "none" }}>
             <strong>本月已繳信用卡</strong>
             {ownCardPayments.length === 0 ? <p className="muted">這個月份還沒有你的信用卡繳款紀錄</p> : null}
-            {ownCardPayments.map((payment) => <div className="row" key={payment.id}><span>{payment.date.slice(5)}　{payment.card}・{payment.billMonth}帳單</span><span className="muted">{money(payment.amount)}</span></div>)}
+            {ownCardPayments.map((payment) => {
+              const includedInstallments = paidLegacyInstallments(payment, legacyInstallments);
+              return <div className="card grid" style={{ boxShadow: "none" }} key={payment.id}>
+                <div className="row"><span>{payment.date.slice(5)}　{payment.card}・{payment.billMonth}帳單</span><span className="muted">{money(payment.amount)}</span></div>
+                {includedInstallments.length > 0 ? <div className="credit-card-lines">
+                  <strong>本期包含的記帳前分期</strong>
+                  {includedInstallments.map((installment) => <div className="credit-card-line" key={`${payment.id}-${installment.id}`}>
+                    <div>
+                      <strong>{installment.name}・第 {installment.installmentNo}/{installment.totalInstallments} 期</strong>
+                      <div className="muted">{installment.isFinal ? "本期已繳完" : "已隨本期帳單繳款"}</div>
+                    </div>
+                    <span>{money(installment.amount)}</span>
+                  </div>)}
+                </div> : null}
+              </div>;
+            })}
           </div> : null}
         </div> : null}
       </article>
@@ -765,3 +795,4 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     </section>
   );
 }
+
