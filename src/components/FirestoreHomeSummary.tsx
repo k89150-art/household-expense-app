@@ -278,6 +278,8 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [creditCardTab, setCreditCardTab] = useState<CreditCardTab>("unbilled");
   const [openedCardDetails, setOpenedCardDetails] = useState<Record<string, boolean>>({});
   const [statementAmountDrafts, setStatementAmountDrafts] = useState<Record<string, string>>({});
+  const [editingInstallmentId, setEditingInstallmentId] = useState<string | null>(null);
+  const [installmentMonthDraft, setInstallmentMonthDraft] = useState("");
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const mutationLockRef = useRef(false);
   const [message, setMessage] = useState("");
@@ -392,16 +394,13 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     }));
   }
 
-  async function handleUpdateInstallmentFirstBillMonth(record: ExpenseRecord) {
+  async function handleUpdateInstallmentFirstBillMonth(record: ExpenseRecord, nextMonth: string) {
     const installment = record.installment;
     if (!installment?.enabled) return;
-    const nextMonth = window.prompt("請輸入第一期帳單月份，例如 2026-09", installment.firstBillMonth);
-    if (!nextMonth) return;
     if (!isValidMonth(nextMonth)) {
       setMessage("月份格式錯誤，請輸入例如 2026-09。");
       return;
     }
-    if (!window.confirm(`確定將這筆分期的第一期帳單月份改成 ${nextMonth} 嗎？`)) return;
     await runMutation("更新分期月份", () => updateExpenseRecord(record.id, {
       installment: {
         ...installment,
@@ -409,6 +408,27 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
         schedule: splitInstallmentAmount(installment.totalPayable, installment.total, nextMonth),
       },
     }));
+    setEditingInstallmentId(null);
+    setInstallmentMonthDraft("");
+  }
+
+  function installmentMonthEditor(record: ExpenseRecord) {
+    const installment = record.installment;
+    if (!installment?.enabled) return null;
+    if (editingInstallmentId !== record.id) {
+      return <button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => {
+        setEditingInstallmentId(record.id);
+        setInstallmentMonthDraft(installment.firstBillMonth);
+      }}>修改</button>;
+    }
+    return <div className="installment-month-editor">
+      <input className="input" type="month" aria-label="第一期帳單月份" value={installmentMonthDraft} onChange={(event) => setInstallmentMonthDraft(event.target.value)} />
+      <button className="btn secondary compact-btn" type="button" disabled={pendingAction !== null || !isValidMonth(installmentMonthDraft)} onClick={() => handleUpdateInstallmentFirstBillMonth(record, installmentMonthDraft)}>儲存</button>
+      <button className="btn secondary compact-btn" type="button" disabled={pendingAction !== null} onClick={() => {
+        setEditingInstallmentId(null);
+        setInstallmentMonthDraft("");
+      }}>取消</button>
+    </div>;
   }
 
   async function handleCreateCardPayment(card: string, statementAmount: number, systemAmount: number, billMonth: string) {
@@ -701,7 +721,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
                     </div>
                     <div className="credit-card-line-side">
                       <span>{money(record.amount)}</span>
-                      {record.sourceExpense?.installment?.enabled ? <button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => record.sourceExpense ? handleUpdateInstallmentFirstBillMonth(record.sourceExpense) : undefined}>修改</button> : null}
+                      {record.sourceExpense ? installmentMonthEditor(record.sourceExpense) : null}
                     </div>
                   </div>)}
                 </div> : null}
@@ -746,7 +766,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
                     </div>
                     <div className="credit-card-line-side">
                       <span>{money(record.amount)}</span>
-                      {record.sourceExpense?.installment?.enabled ? <button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => record.sourceExpense ? handleUpdateInstallmentFirstBillMonth(record.sourceExpense) : undefined}>修改</button> : null}
+                      {record.sourceExpense ? installmentMonthEditor(record.sourceExpense) : null}
                     </div>
                   </div>)}
                 </div> : null}
