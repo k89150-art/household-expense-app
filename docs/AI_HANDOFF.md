@@ -93,3 +93,67 @@ pnpm 12 會因供應鏈政策阻止 `@firebase/util`、`protobufjs`、`sharp`、
 - 未修改或連線 Firebase、Firestore、Authentication、Vercel 或正式資料。
 
 尚待產品確認：工作收入未來對外整合是否只限 Chris、是否需要兩人分開摘要，以及所有收入的幣別語意。確認前不得讓正式收入畫面、統計或 API 依賴候選 policy。
+
+## 2026-10-29 Phase 1 階段 3：Firebase Emulator 本機測試環境
+
+- 專用 project ID：`demo-household-expense`。
+- Authentication Emulator：`127.0.0.1:9099`。
+- Firestore Emulator：`127.0.0.1:8080`。
+- `firebase.json` 只新增上述 loopback Emulator 設定並停用 Emulator UI；正式 Rules、indexes、Firebase 初始化與登入流程均未修改。
+- 測試程式在初始化 Firebase SDK 或清除／寫入資料前，會驗證 `demo-*` project ID、loopback host 與固定 port；設定不符時直接停止，不會 fallback 到正式 Firebase。
+- Seed 建立三個虛構 Auth 使用者、`households/default-household`、兩個 `memberIds`，以及一筆收入、支出、固定支出範本；第三個使用者刻意不在家庭成員清單中。
+- Seed 每次先透過 Emulator 專用 REST endpoint 清除 demo project 的 Auth／Firestore 資料，因此可重複執行；不讀取 `.env.local`、Service Account 或正式憑證。
+
+需要 Java 21。若 Java 未在 PATH，可在 PowerShell 暫時指定本機 JDK：
+
+```powershell
+$env:JAVA_HOME = Join-Path $env:LOCALAPPDATA 'Programs\OpenJDK\temurin-21'
+$env:PATH = (Join-Path $env:JAVA_HOME 'bin') + ';' + $env:PATH
+```
+
+自動啟動 Emulator、執行整合測試並關閉：
+
+```powershell
+.\node_modules\.bin\firebase.cmd emulators:exec --project demo-household-expense --only auth,firestore "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --test-concurrency=1 tests/emulator/*.test.mjs"
+```
+
+手動檢查 Seed 時，先在一個終端啟動 Emulator：
+
+```powershell
+.\node_modules\.bin\firebase.cmd emulators:start --project demo-household-expense --only auth,firestore
+```
+
+再於另一個終端執行：
+
+```powershell
+node scripts/seed-firebase-emulator.mjs
+```
+
+本階段真實 Emulator 測試 16/16 通過，涵蓋設定檔 loopback 驗證、Auth 使用者、可重複 Seed、未登入拒絕、家庭成員讀寫、非成員拒絕、`householdId` 驗證、收入／支出／固定支出 CRUD 與集合查詢。這不是 mock 測試。
+
+完整驗證結果：原有測試 29/29 通過；真實 Emulator 測試 16/16 通過；ESLint、TypeScript typecheck、Next.js production build 與 `git diff --check` 均通過。
+
+現有 Rules 的已知限制：
+
+- 子集合只驗證成員資格與 `householdId`，沒有驗證金額型別、分類或必要欄位；合法成員可寫入 schema 錯誤但 `householdId` 正確的文件。本階段以測試如實記錄，未修改 Rules。
+- 已刪除或不存在的子文件在讀取時，`existingBelongsToHousehold` 會因 `resource.data` 不存在而回傳 permission-denied，而不是可讀取的 not-found。
+- Firebase CLI 無法取得 MOTD／remote config 時會顯示非致命網路警告，不影響本機 Emulator 測試。
+
+本階段沒有連線正式 Firebase、修改正式資料、執行 deploy、commit 或 push。
+
+## 2026-10-29 Phase 1 階段 3：最終驗收（Claude 接手）
+
+- Codex 額度用盡，由 Claude 暫時接手本階段的最終審查。
+- 驗證是使用者在本機 PowerShell 實際執行的：原有測試 29/29 通過、真實 Firebase Emulator 測試 16/16 通過（`demo-household-expense`、Auth `127.0.0.1:9099`、Firestore `127.0.0.1:8080`）、ESLint、TypeScript、Next.js production build 均通過，`git diff --check` exit code 0；Firebase CLI 已完成 Emulator 關閉程序。Claude 這個工作階段沒有本機終端機權限，未親自執行任何測試或 Git 指令。
+- Claude 唯讀審查（對照 GitHub `main` 基準 `9f448609`）：
+  - `package.json` 只新增 devDependencies `firebase-tools@15.34.2`、`@firebase/rules-unit-testing@5.0.2`，以及 `emulator:seed`、`test:emulator` 兩個 scripts；dependencies 沒有變更。
+  - `pnpm-lock.yaml` 的 importer specifier 與 `package.json` 一致；基準原有的 474 個套件版本全部保留，沒有移除或升級，只新增上述兩個套件的相依套件（部分以並存的不同版本加入）。`next`、`eslint` 等既有 importer 只有 peer 標記（`supports-color`、`@opentelemetry/api`）改變，解析版本不變。
+  - `src/`、`firebase/firestore.rules`、`firebase/firestore.indexes.json`、`public/` 在階段 2 commit 之後沒有修改；正式 Firebase 初始化與登入流程未變。
+  - Seed 與測試只使用虛構帳號與資料，未讀取 `.env*`，未包含正式金鑰、Token 或 Service Account。
+- 提交範圍：只提交階段 3 的九個指定檔案；commit 由使用者在 PowerShell 執行，hash 以 `git log -1` 為準。沒有 push、合併 main 或部署。
+
+下一位 AI 接手注意：
+
+- 階段 3 新增或修改的檔案在工作樹中使用 CRLF 換行，既有檔案為 LF；`.git/config` 沒有設定 `core.autocrlf`，提交前請用 `git diff --cached --stat` 確認沒有出現整檔換行差異。
+- Phase 1 階段 4 尚未開始，必須等使用者另行授權。
+- Rules 不驗證子集合 schema 的已知限制維持不變（見 D-009），需另案評估。

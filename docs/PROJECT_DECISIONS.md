@@ -54,3 +54,12 @@
 - 隱私：合法輸出只投影日期、數字金額、工作收入分類與經常性標記，不回傳 note、createdBy、Firebase UID、家庭 ID 或其他原始欄位。
 - 相容性：正式 Firestore 仍保存 `amount: number`；API 專用 decimal string 與 response validator 不在本階段整合。
 - 限制：純函式目前沒有 UI、報表、Firestore query 或 API route 呼叫者，候選 Chris-only policy 必須由後續產品決策另案啟用。
+
+## D-009 Firebase Emulator 安全邊界
+
+- 日期：2026-10-29
+- 決策：Firebase 本機整合測試固定使用 `demo-household-expense`，Authentication 與 Firestore 只綁定 `127.0.0.1:9099`、`127.0.0.1:8080`。
+- 防護：測試及 Seed 在 SDK 初始化或資料操作前驗證 demo project、loopback host 與固定 port；不符合即停止，禁止 fallback 到正式 Firebase。
+- 資料：Seed 僅使用虛構帳號與資料，UID 由 Authentication Emulator 產生並同步寫入 `households/default-household.memberIds`。
+- Rules：本機測試載入現有 `firebase/firestore.rules`；不得為了測試通過而放寬或修改正式 Rules。
+- 限制：目前 Rules 不驗證子集合 schema，只保護登入、家庭成員與 `householdId`；是否補強欄位驗證需另案評估，本階段不處理。
