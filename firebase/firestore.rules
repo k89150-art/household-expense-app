@@ -19,13 +19,8 @@ service cloud.firestore {
       return request.resource.data.householdId == householdId;
     }
 
-    function existingBelongsToHousehold(householdId) {
-      return resource.data.householdId == householdId;
-    }
-
     match /households/{householdId} {
       allow read: if signedIn() && request.auth.uid in resource.data.memberIds;
-      // R1: household documents and memberIds are managed outside the client app.
       allow create, update, delete: if false;
 
       match /{collectionName}/{docId} {
@@ -41,7 +36,7 @@ service cloud.firestore {
           'creditCardBills',
           'prepaidAccounts',
           'prepaidSettlements'
-        ] && isHouseholdMember(householdId) && existingBelongsToHousehold(householdId);
+        ] && isHouseholdMember(householdId);
 
         allow create: if collectionName in [
           'expenses',
@@ -69,7 +64,7 @@ service cloud.firestore {
           'creditCardBills',
           'prepaidAccounts',
           'prepaidSettlements'
-        ] && isHouseholdMember(householdId) && existingBelongsToHousehold(householdId) && belongsToHousehold(householdId);
+        ] && isHouseholdMember(householdId) && belongsToHousehold(householdId);
       }
 
       match /privateExpenseDetails/{detailId} {

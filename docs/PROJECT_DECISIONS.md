@@ -63,6 +63,7 @@
 - 資料：Seed 僅使用虛構帳號與資料，UID 由 Authentication Emulator 產生並同步寫入 `households/default-household.memberIds`。
 - Rules：本機測試載入現有 `firebase/firestore.rules`；不得為了測試通過而放寬或修改正式 Rules。
 - 限制：目前 Rules 不驗證子集合 schema，只保護登入、家庭成員與 `householdId`；是否補強欄位驗證需另案評估，本階段不處理。
+- 更正（2026-10-29，見 D-012）：當時 repo 的 `firebase/firestore.rules` 是未部署的 `af1282f` 版本，與正式線上 Rules（`965c4c3`）不同；Emulator 測試結果只代表 Git 版行為。之後 Emulator 一律載入與正式版相容的 Rules。
 
 ## D-010 Git 換行格式規則
 
@@ -79,3 +80,13 @@
 - 原因：原規則允許成員任意改寫 `memberIds` 或刪除家庭文件（可擴大權限或鎖死全家資料），且任何登入者都能建立新家庭；正式程式沒有任何寫入家庭文件的流程。
 - 管理：成員調整只能透過 Firebase Console 等受控管理流程；Emulator 測試以 Emulator 專用的 owner 通道建立家庭文件，不得為測試放寬 Rules。
 - 限制：R1 不包含子集合欄位驗證（R3／R4）與固定支出模板讀取問題（R2）；正式部署需另行授權。
+- 更正（2026-10-29，見 D-012）：「固定支出模板讀取問題」只存在於未部署的 Git `af1282f` 版本；正式線上 Rules 允許成員讀取不存在的子文件，新增模板流程在正式環境正常，R2 不需處理此項。R1 改以正式 Rules 為基準，只修改家庭文件權限。
+
+## D-012 Firestore Rules 以正式線上版本為相容基準
+
+- 日期：2026-10-29
+- 事實：使用者自 Firebase Console 備份的正式 Rules（`家庭記帳-Rules備份\firestore.rules.prod-20261029.rules.txt`）與 Git `965c4c3` 完全一致；GitHub main 與 R1 前的 repo 版本則是 `af1282f`，多了 `existingBelongsToHousehold()`，用於子集合 read／delete／update。`af1282f` 的限制從未出現在正式線上 Rules。
+- 決策：repo 的 `firebase/firestore.rules` 以正式線上版本為基準；R1 只修改 `households/{householdId}`（成員可讀，客戶端不可 create／update／delete），其餘條件與正式備份逐字一致，不導入 `existingBelongsToHousehold()`。
+- 正式環境既有行為（保留）：成員可讀取不存在的子文件（回傳 not-found）；成員可讀取、刪除缺少 `householdId` 的舊文件；修改時結果文件必須含正確 `householdId`；子集合查詢不強制 `householdId` 篩選（App 查詢仍自行加上）。
+- Git 曾有、未部署的限制：`af1282f` 會拒絕上述讀取、刪除與修改，並使 `upsertRecurringExpenseTemplate()` 新增模板失敗。是否採用需另案評估（可與 R3／R4 一併），不得隨其他修改一起部署。
+- 部署前條件：每次部署 Rules 前必須重新從 Console 備份線上版本，並確認與 repo 版本的差異只有本次授權的修改。

@@ -248,10 +248,12 @@ test("R1 compatibility: existing recurring expense templates remain readable", a
   assert.equal(seeded.data().name, "Emulator Test Rent");
 });
 
-test("Known limitation (not fixed in R1): reading a missing recurring template is denied", async () => {
+test("R1 compatibility: reading a missing recurring template returns not-found", async () => {
   // upsertRecurringExpenseTemplate() calls getDoc() before the first write of a new template.
-  // Current Rules evaluate resource.data on a missing document and deny the read.
-  await assertFails(getDoc(doc(memberDb(), `${householdPath}/recurringExpenses/not-created-yet`)));
+  // Production Rules allow this read for members, so the template can be created.
+  const snapshot = await assertSucceeds(getDoc(doc(memberDb(), `${householdPath}/recurringExpenses/not-created-yet`)));
+  assert.equal(snapshot.exists(), false);
+  await assertFails(getDoc(doc(outsiderDb(), `${householdPath}/recurringExpenses/not-created-yet`)));
 });
 
 test("R1 compatibility: private expense batch write and owner-only access are unchanged", async () => {

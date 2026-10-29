@@ -180,7 +180,9 @@ test("income supports create, read, update, and delete through current Rules", a
   await assertSucceeds(updateDoc(target, { amount: 4200, householdId: TEST_HOUSEHOLD_ID }));
   assert.equal((await assertSucceeds(getDoc(target))).data().amount, 4200);
   await assertSucceeds(deleteDoc(target));
-  await assertFails(getDoc(target));
+  // Production Rules allow members to read a missing document; it returns not-found.
+  const deleted = await assertSucceeds(getDoc(target));
+  assert.equal(deleted.exists(), false);
 });
 
 test("expense supports create, read, update, and delete through current Rules", async () => {

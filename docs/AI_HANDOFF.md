@@ -136,7 +136,7 @@ node scripts/seed-firebase-emulator.mjs
 現有 Rules 的已知限制：
 
 - 子集合只驗證成員資格與 `householdId`，沒有驗證金額型別、分類或必要欄位；合法成員可寫入 schema 錯誤但 `householdId` 正確的文件。本階段以測試如實記錄，未修改 Rules。
-- 已刪除或不存在的子文件在讀取時，`existingBelongsToHousehold` 會因 `resource.data` 不存在而回傳 permission-denied，而不是可讀取的 not-found。
+- 已刪除或不存在的子文件在讀取時，`existingBelongsToHousehold` 會因 `resource.data` 不存在而回傳 permission-denied，而不是可讀取的 not-found。（更正：只適用於未部署的 Git `af1282f` 版本；正式線上 Rules 會回傳 not-found，見 D-012。）
 - Firebase CLI 無法取得 MOTD／remote config 時會顯示非致命網路警告，不影響本機 Emulator 測試。
 
 本階段沒有連線正式 Firebase、修改正式資料、執行 deploy、commit 或 push。
@@ -180,8 +180,30 @@ node scripts/seed-firebase-emulator.mjs
 
 - M2：子集合仍未驗證欄位白名單、必填欄位、`amount` 型別與範圍、分類與 `owner` 合法值（R3／R4 處理）。
 - L1–L5：`createdBy` 可偽造、時間戳記未驗證、成員可修改彼此紀錄、被移出成員仍可存取本人私人明細、無欄位白名單。
-- 已知相容性問題（本階段只記錄、未修復）：讀取不存在的子集合文件會被拒絕，`upsertRecurringExpenseTemplate()` 新增模板前的 `getDoc` 會失敗並退回本機模板；已以測試 30 記錄目前行為，留待 R2 決定。
+- 已知相容性問題（本階段只記錄、未修復）：讀取不存在的子集合文件會被拒絕，`upsertRecurringExpenseTemplate()` 新增模板前的 `getDoc` 會失敗並退回本機模板；已以測試 30 記錄目前行為，留待 R2 決定。（更正：此問題只存在於未部署的 Git `af1282f` 版本，正式環境沒有；`cc3e54e` 的 Rules 檔不可直接部署，見下一節與 D-012。）
 
 部署狀態：R1 只在本機 Emulator 驗證，**尚未部署到正式 Firebase**；正式 Rules 仍為舊版。部署需使用者另行授權，並先保存目前正式 Rules 作為回滾版本。
 
 更正：上一節「階段 3 新增或修改的檔案在工作樹中使用 CRLF」不完全正確；新增的 `scripts/`、`tests/emulator/` 檔案為 LF，換行規則現以 `.gitattributes`（D-010）為準。
+
+## 2026-10-29 Phase 1 階段 4：R1 正式相容版
+
+- 基準：`cc3e54ebc74bfe16cac1fd2473d6766d7750232e`；分支 `feature/phase1-income-foundation`。
+- 背景：使用者從 Firebase Console 備份的正式 Rules（`家庭記帳-Rules備份\firestore.rules.prod-20261029.rules.txt`）與 Git `965c4c3` 完全一致，與 repo 的 `af1282f` 版本不同（正式版沒有 `existingBelongsToHousehold()`）。`cc3e54e` 的 Rules 檔若直接部署，會同時帶入未授權的 `af1282f` 限制，因此不可部署。
+- `firebase/firestore.rules`：改為「正式備份＋R1」。與正式備份的差異只有 `households/{householdId}` 兩行：`allow read` 保留成員條件，`allow create, update, delete: if false`。其餘條件逐字一致，不導入 `existingBelongsToHousehold()`。
+- 測試調整（改為反映正式行為）：
+  - `firebase-emulator.test.mjs` 收入 CRUD：刪除後讀取改為「成功且 not-found」。
+  - `household-rules.test.mjs` 第 30 項：改為「成員可讀取不存在的固定支出模板（not-found）、非成員不可」。
+  - 新增 `tests/emulator/production-compat.test.mjs`（6 項）：完整模擬 `upsertRecurringExpenseTemplate()` 的新增／另一成員重存／列表／刪除流程，非成員不可執行；缺少 `householdId` 的舊資料可由成員讀取、刪除，修改時須帶入 `householdId`，非成員不可存取，且 App 列表查詢本來就不會列出；讀取不存在的收入／支出對成員回傳 not-found、對非成員與未登入拒絕。
+- Seed 與 R1 家庭文件權限測試維持不變。
+
+驗證結果（Claude 在雲端隔離副本實際執行，非使用者本機）：
+
+- 正式備份與候選 Rules 的差異（忽略換行）只有上述 R1 兩行。
+- 原有單元測試 29/29 通過。
+- 真實 Firebase Emulator 測試 37/37 通過（原有 16＋R1 15＋正式相容 6），Emulator 正常關閉。
+- 反向驗證：以 `cc3e54e` 的 Git 版 Rules 執行時，第 13、30、32、34–37 項失敗，證明測試能分辨 `af1282f` 與正式行為；以正式備份原樣執行時，正式相容測試 32–37 全部通過，R1 測試 20–26 失敗（27–31 因家庭文件已被前面的測試真的刪除或覆寫而連帶失敗），證明 H1／M1 在線上仍存在。
+- ESLint、TypeScript `--noEmit`、Next.js production build、`git diff --check` 均通過。
+- 使用者本機驗證：待執行。
+
+部署狀態：尚未部署。部署前須重新從 Console 備份線上 Rules、確認與 repo 差異只有 R1，並取得使用者授權；只使用 `--only firestore:rules`。
