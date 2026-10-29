@@ -44,6 +44,36 @@ async function deleteEmulatorData() {
   }
 }
 
+// Household documents are not client-writable under the R1 Rules. The seed writes
+// them through the Emulator-only privileged channel ("Bearer owner"), which works
+// only against the local Emulator and never against production Firebase.
+async function seedHouseholdDocument(memberIds) {
+  assertSafeEmulatorTarget();
+  const now = new Date().toISOString();
+  const endpoint = emulatorUrl(
+    "firestore",
+    `/v1/projects/${EMULATOR_PROJECT_ID}/databases/(default)/documents/households/${TEST_HOUSEHOLD_ID}`,
+  );
+  const response = await fetch(endpoint, {
+    method: "PATCH",
+    headers: {
+      Authorization: "Bearer owner",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      fields: {
+        name: { stringValue: "Emulator Test Household" },
+        memberIds: { arrayValue: { values: memberIds.map((uid) => ({ stringValue: uid })) } },
+        createdAt: { timestampValue: now },
+        updatedAt: { timestampValue: now },
+      },
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to seed Emulator household (${response.status}): ${await response.text()}`);
+  }
+}
+
 async function createTestUser(auth, email) {
   const credential = await createUserWithEmailAndPassword(auth, email, TEST_PASSWORD);
   return { email, uid: credential.user.uid };
@@ -73,12 +103,7 @@ export async function seedFirebaseEmulators() {
     const householdPath = `households/${TEST_HOUSEHOLD_ID}`;
     const common = { householdId: TEST_HOUSEHOLD_ID, createdBy: member.uid };
 
-    await setDoc(doc(db, householdPath), {
-      name: "Emulator Test Household",
-      memberIds: [member.uid, partner.uid],
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+    await seedHouseholdDocument([member.uid, partner.uid]);
     await setDoc(doc(db, `${householdPath}/incomes/seed-income`), {
       ...common,
       date: "2026-10-01",

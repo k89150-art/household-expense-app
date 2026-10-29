@@ -71,3 +71,11 @@
 - 規則來源：以 repo 根目錄的 `.gitattributes` 為共同換行規則，優先於個別電腦的 `core.autocrlf` 設定。Codex 與 Claude 都必須遵守，不得在檔案內另行改變換行格式。
 - 既有檔案：導入時不立即正規化。目前 `src/app/globals.css`、`src/components/FirestoreHomeSummary.tsx`、`src/components/IncomeForm.tsx`、`src/components/RecurringExpensePanel.tsx`、`src/lib/records.ts` 在 repo 中為 CRLF／LF 混用，暫時維持原狀。
 - 限制：未來執行 `git add --renormalize` 時，必須取得使用者授權並獨立提交，並以 `git diff --cached --ignore-cr-at-eol` 確認只有換行差異；不得把換行正規化混入任何功能修改。
+
+## D-011 家庭文件不開放客戶端寫入
+
+- 日期：2026-10-29
+- 決策：`households/{householdId}` 只允許家庭成員讀取；所有客戶端皆不得建立、修改或刪除家庭文件，`memberIds` 不得由 App 變更。
+- 原因：原規則允許成員任意改寫 `memberIds` 或刪除家庭文件（可擴大權限或鎖死全家資料），且任何登入者都能建立新家庭；正式程式沒有任何寫入家庭文件的流程。
+- 管理：成員調整只能透過 Firebase Console 等受控管理流程；Emulator 測試以 Emulator 專用的 owner 通道建立家庭文件，不得為測試放寬 Rules。
+- 限制：R1 不包含子集合欄位驗證（R3／R4）與固定支出模板讀取問題（R2）；正式部署需另行授權。

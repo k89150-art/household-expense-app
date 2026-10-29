@@ -157,3 +157,31 @@ node scripts/seed-firebase-emulator.mjs
 - 階段 3 新增或修改的檔案在工作樹中使用 CRLF 換行，既有檔案為 LF；`.git/config` 沒有設定 `core.autocrlf`，提交前請用 `git diff --cached --stat` 確認沒有出現整檔換行差異。
 - Phase 1 階段 4 尚未開始，必須等使用者另行授權。
 - Rules 不驗證子集合 schema 的已知限制維持不變（見 D-009），需另案評估。
+
+## 2026-10-29 Phase 1 階段 4：Firestore Rules R1（家庭文件鎖定）
+
+- 基準：`13111a0dddebab9b2dfd6d15c7d8801d117c75ea`；分支 `feature/phase1-income-foundation`。
+- 修正 H1（成員可任意修改／刪除家庭文件、可透過 `memberIds` 擴大權限）與 M1（任何登入者可建立新家庭）。
+- `firebase/firestore.rules`：`households/{householdId}` 只保留成員讀取；`create`、`update`、`delete` 一律為 `false`。子集合與 `privateExpenseDetails` 規則未變更。
+- 已確認正式程式沒有建立、修改 `memberIds` 或刪除家庭文件的流程；家庭成員日後只能透過 Firebase Console 等受控管理流程調整，本階段未新增管理功能。
+- `scripts/seed-firebase-emulator.mjs`：家庭文件改由 Emulator 專用的 `Authorization: Bearer owner` REST 通道寫入（先經 `assertSafeEmulatorTarget()` 檢查 demo project 與 loopback），其餘收入、支出、固定支出測試資料仍以成員客戶端身分寫入並經過 Rules；未為 Seed 放寬 Rules。
+- 新增 `tests/emulator/household-rules.test.mjs`（15 項）：未登入者／非成員不可讀、兩位成員可讀、不可新增或移除 `memberIds`、不可修改其他欄位或刪除家庭文件、非成員與成員皆不可從客戶端建立新家庭、收入與支出 CRUD 及查詢相容、既有固定支出模板可讀、私人支出 batch 寫入與本人限定存取不變。
+
+驗證結果（Claude 在雲端副本實際執行，非使用者本機）：
+
+- 依 `pnpm-lock.yaml` 安裝相同版本依賴，使用 Java 21 與使用者本機的 `cloud-firestore-emulator-v1.22.0.jar`。
+- 原有單元測試 29/29 通過。
+- 真實 Firebase Emulator 測試 31/31 通過（原有 16 項＋R1 新增 15 項）。
+- 反向驗證：把 Rules 換回 `13111a0` 版本時，R1 測試 20–26 失敗；27–31 也連帶失敗，因為舊 Rules 讓前面的測試真的刪除／覆寫了家庭文件，證明測試能偵測 H1／M1。
+- ESLint、TypeScript `--noEmit`、Next.js production build 均通過。
+- 使用者本機驗證：待執行。
+
+尚未解決的 Rules 問題：
+
+- M2：子集合仍未驗證欄位白名單、必填欄位、`amount` 型別與範圍、分類與 `owner` 合法值（R3／R4 處理）。
+- L1–L5：`createdBy` 可偽造、時間戳記未驗證、成員可修改彼此紀錄、被移出成員仍可存取本人私人明細、無欄位白名單。
+- 已知相容性問題（本階段只記錄、未修復）：讀取不存在的子集合文件會被拒絕，`upsertRecurringExpenseTemplate()` 新增模板前的 `getDoc` 會失敗並退回本機模板；已以測試 30 記錄目前行為，留待 R2 決定。
+
+部署狀態：R1 只在本機 Emulator 驗證，**尚未部署到正式 Firebase**；正式 Rules 仍為舊版。部署需使用者另行授權，並先保存目前正式 Rules 作為回滾版本。
+
+更正：上一節「階段 3 新增或修改的檔案在工作樹中使用 CRLF」不完全正確；新增的 `scripts/`、`tests/emulator/` 檔案為 LF，換行規則現以 `.gitattributes`（D-010）為準。
