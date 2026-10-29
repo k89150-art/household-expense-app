@@ -72,18 +72,8 @@ export interface PrivateExpenseDetail {
   updatedAt: string;
 }
 
-export interface Income {
-  id: string;
-  householdId: string;
-  date: string;
-  amount: number;
-  ownerId: string;
-  category: "薪水" | "生活費轉入" | "獎金" | "兼職" | "補助" | "投資收入" | "其他";
-  note?: string;
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-}
+// 保留既有 type import；唯一權威契約在 income.ts，沒有 ownerId 舊形狀。
+export type { IncomeRecord as Income } from "./income";
 
 export interface LivingTransfer {
   id: string;

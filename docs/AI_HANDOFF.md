@@ -59,3 +59,20 @@ pnpm install --frozen-lockfile --node-linker=hoisted --package-import-method=cop
 pnpm 12 會因供應鏈政策阻止 `@firebase/util`、`protobufjs`、`sharp`、`unrs-resolver` 的安裝 scripts；本次沒有擅自修改允許清單。即使忽略 scripts，現有 test、lint、typecheck、build 與 dev server 均已通過。若未來確定需要這些 postinstall scripts，應另案審查後再設定 `onlyBuiltDependencies`。
 
 目前的 hoisted＋copy `node_modules` 沒有發現 reparse point，但約佔數百 MiB，OneDrive 仍會同步大量可重建檔案。建議後續固定使用同一安裝方式，且不要把 `node_modules` 或 `.next` 納入歷史封存。
+
+## 2026-10-29 Phase 1 階段 1：收入型別集中化
+
+- 分支：`feature/phase1-income-foundation`
+- 基準：`96f8e033be7076ac0a0c4652db976ea43e6d0bf7`
+- 新增 `src/types/income.ts` 作為收入擁有者、分類與 Firestore 收入紀錄的唯一權威型別。
+- `records.ts` 保留既有轉匯出介面與所有 CRUD 實作；`IncomeForm` 保留原有欄位、選項順序與操作流程。
+- `domain.ts` 原本未使用且欄位不符正式資料的 `Income`，改為權威 `IncomeRecord` 的相容別名。
+- 未修改 Firebase 初始化、Authentication、Firestore Rules、project ID、資料結構、計算邏輯或 UI。
+
+驗證結果：
+
+- 原有測試 16/16 通過。
+- 新增收入 runtime 測試 3/3 通過；全部共 19/19 通過。
+- 收入 owner、分類、欄位與 `amount: number` 的 compile-time 契約通過。
+- ESLint、TypeScript typecheck、Next.js production build、`git diff --check` 均通過。
+- 本階段未執行端到端 Firestore 測試，也未連線或操作正式記帳資料。

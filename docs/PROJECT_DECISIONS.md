@@ -39,3 +39,10 @@
 - 決策：歷史成果以 `%USERPROFILE%\OneDrive\文件\家庭記帳-歷史開發封存` 中通過 SHA-256 驗證的 snapshot、patch 與 Git bundle 為復原來源。
 - 原因：部分舊工作樹已不存在，但正式工作區與 A／B／C 封存均已完成完整性驗證。
 - 限制：不得把歷史封存當成正式工作區直接修改，也不得未經另案審查自動還原、合併 Phase 1 或改動 Firebase。
+
+## D-007 收入權威型別
+
+- 日期：2026-10-29
+- 決策：收入擁有者、收入分類與收入紀錄欄位以 `src/types/income.ts` 為唯一權威型別；`records.ts` 只負責轉匯出與 Firestore CRUD。
+- 相容性：保留正式 Firestore 的 `owner`、`amount: number`、既有分類與其餘文件欄位；`年終` 僅供讀取既有資料，新表單仍使用 `年終獎金`。
+- 限制：本決策不包含工作收入篩選、API 契約、Firebase 環境隔離或資料遷移。
