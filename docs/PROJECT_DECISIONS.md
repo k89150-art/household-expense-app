@@ -90,3 +90,11 @@
 - 正式環境既有行為（保留）：成員可讀取不存在的子文件（回傳 not-found）；成員可讀取、刪除缺少 `householdId` 的舊文件；修改時結果文件必須含正確 `householdId`；子集合查詢不強制 `householdId` 篩選（App 查詢仍自行加上）。
 - Git 曾有、未部署的限制：`af1282f` 會拒絕上述讀取、刪除與修改，並使 `upsertRecurringExpenseTemplate()` 新增模板失敗。是否採用需另案評估（可與 R3／R4 一併），不得隨其他修改一起部署。
 - 部署前條件：每次部署 Rules 前必須重新從 Console 備份線上版本，並確認與 repo 版本的差異只有本次授權的修改。
+
+## D-013 R1 正式部署與 Rules 部署程序
+
+- 日期：2026-10-29
+- 事實：R1 已由使用者以 Firebase CLI 15.34.2 部署到 `household-expense-app-8102d` 的 `(default)` 資料庫，來源為 commit `1335b2e` 的 `firebase/firestore.rules`，只使用 `--only firestore:rules`；Console 已確認生效，正式網站讀取正常。未部署 Vercel、未 migration、未修改正式資料。
+- 回滾基準：部署前備份 `家庭記帳-Rules備份\firestore.rules.prod-20261029.rules.txt`（SHA-256 `5412BE69EE1D4B824D59D4B5CCE0A06F8FAB813F20BE3170F121558F821C7E08`，內容等於 Git `965c4c3`）。
+- 決策：之後 Rules 部署一律遵守：部署前重新從 Console 備份並比對；差異只能是當次授權的修改；只用 `--only firestore:rules`；不從 GitHub main（目前仍為 `af1282f` 版本）部署。
+- 尚未完成：正式環境完整 CRUD 驗收、R3／R4、正式與開發 Firebase 環境隔離。

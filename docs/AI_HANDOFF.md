@@ -207,3 +207,40 @@ node scripts/seed-firebase-emulator.mjs
 - 使用者本機驗證：待執行。
 
 部署狀態：尚未部署。部署前須重新從 Console 備份線上 Rules、確認與 repo 差異只有 R1，並取得使用者授權；只使用 `--only firestore:rules`。
+
+## 2026-10-29 Phase 1 階段 4：R1 正式部署紀錄
+
+以下事實由使用者實際操作並回報；Claude 沒有正式 Firebase 的存取權限，未親自執行部署或線上檢查。
+
+部署內容與方式：
+
+- 部署來源：分支 `feature/phase1-income-foundation`，commit `1335b2ea7881d8f107e932b63118da1da7510631`（`fix: align R1 rules with production baseline`）的 `firebase/firestore.rules`。
+- Firebase 專案：`household-expense-app-8102d`；Firestore 資料庫：`(default)`。
+- Firebase CLI：15.34.2；指令只使用 `--only firestore:rules`，CLI 顯示 Deploy complete。
+- 部署內容：正式 Rules（Git `965c4c3`）加上 R1。差異只有 `households/{householdId}`：成員可讀，客戶端不可 create／update／delete。未導入 `existingBelongsToHousehold()`。
+- 部署前回滾備份：`%USERPROFILE%\OneDrive\文件\家庭記帳-Rules備份\firestore.rules.prod-20261029.rules.txt`，SHA-256 `5412BE69EE1D4B824D59D4B5CCE0A06F8FAB813F20BE3170F121558F821C7E08`（Claude 已重新計算並確認一致）；內容與 Git `965c4c3` 相同。
+- 部署前本機驗證（使用者執行）：單元測試 29/29、Firebase Emulator 測試 37/37 通過。
+
+部署後狀態：
+
+- 已完成正式部署：Firebase Console 已確認新版 Rules 生效。
+- 已確認正式網站讀取正常：正式網站可以正常讀取記帳資料。
+- 未重新部署 Vercel；未執行資料 migration；未修改正式記帳紀錄、`memberIds` 或家庭文件。
+- H1（成員可改寫／刪除家庭文件、擴大 `memberIds`）與 M1（任何登入者可建立新家庭）在正式環境已由 R1 封鎖。
+
+尚未完成：
+
+- 尚未執行正式環境完整 CRUD 驗收：收入、支出、私人支出、固定支出模板、代墊、刷卡繳款的新增、修改、刪除，目前只確認讀取正常；兩位成員各自登入的驗收也尚未記錄。
+- 尚未在 Console 規則模擬器記錄 R1 驗證結果（成員 get 允許；update／delete 拒絕；非成員 get、create 拒絕）。
+- 尚未確認正式 `households` 集合是否只有 `default-household`（M1 修補前是否已被利用）。
+- 正式站部署產物實際使用的 Project ID 尚未以產物檢查驗證；目前依程式預設值與 Vercel 無環境變數推定為 `household-expense-app-8102d`。
+- R3（新建立資料的欄位驗證）、R4（修改時的欄位驗證）尚未開始；M2、L1–L5 仍未處理。
+- `af1282f` 的 `existingBelongsToHousehold()` 限制是否採用，尚待另案評估（見 D-012）。
+- Firebase 正式／開發環境隔離尚未完成：`src/lib/firebase.ts` 仍以正式設定為預設值，App 無法連接 Emulator；歷史封存的 Phase 1 環境隔離方案未整合。
+
+下一位 AI 接手注意：
+
+- 正式線上 Rules 現在等於 repo `1335b2e` 的 `firebase/firestore.rules`。GitHub main（`9f44860`）的 Rules 仍是未部署的 `af1282f` 版本，**不可從 main 部署 Rules**，否則會撤銷 R1 並帶入未授權限制。
+- 回滾方式：在 Console 規則歷史選回 R1 前版本，或發布上述備份檔內容；回滾前先確認備份 SHA-256。
+- 每次部署 Rules 前，都要重新從 Console 備份線上版本，確認與 repo 的差異只有本次授權的修改，且只用 `--only firestore:rules`。
+- 本分支尚未 push，也尚未合併 main。
