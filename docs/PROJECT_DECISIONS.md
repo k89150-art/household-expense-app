@@ -46,3 +46,11 @@
 - 決策：收入擁有者、收入分類與收入紀錄欄位以 `src/types/income.ts` 為唯一權威型別；`records.ts` 只負責轉匯出與 Firestore CRUD。
 - 相容性：保留正式 Firestore 的 `owner`、`amount: number`、既有分類與其餘文件欄位；`年終` 僅供讀取既有資料，新表單仍使用 `年終獎金`。
 - 限制：本決策不包含工作收入篩選、API 契約、Firebase 環境隔離或資料遷移。
+
+## D-008 工作收入純函式邊界
+
+- 日期：2026-10-29
+- 決策：工作收入篩選只能存在於無 I/O 的獨立純函式；預設 policy 對 `chris` 與 `wife` 一致，不能將未確認的 Chris-only 規則接到正式功能。
+- 隱私：合法輸出只投影日期、數字金額、工作收入分類與經常性標記，不回傳 note、createdBy、Firebase UID、家庭 ID 或其他原始欄位。
+- 相容性：正式 Firestore 仍保存 `amount: number`；API 專用 decimal string 與 response validator 不在本階段整合。
+- 限制：純函式目前沒有 UI、報表、Firestore query 或 API route 呼叫者，候選 Chris-only policy 必須由後續產品決策另案啟用。

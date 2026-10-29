@@ -76,3 +76,20 @@ pnpm 12 會因供應鏈政策阻止 `@firebase/util`、`protobufjs`、`sharp`、
 - 收入 owner、分類、欄位與 `amount: number` 的 compile-time 契約通過。
 - ESLint、TypeScript typecheck、Next.js production build、`git diff --check` 均通過。
 - 本階段未執行端到端 Firestore 測試，也未連線或操作正式記帳資料。
+
+## 2026-10-29 Phase 1 階段 2：工作收入純函式
+
+- 基準：`9383ca5d33b8431d5fa5d583436bff9d7fcefe19`
+- 新增 `src/lib/workIncome.ts`，只提供無 I/O 的工作收入資料驗證、分類與最小欄位投影。
+- 正式預設 policy 同等接受 `chris`、`wife`；封存中的 Chris-only 規則保留為名稱明確、未啟用的 opt-in 候選 policy。
+- 工作收入包含本薪、獎勵金、加班費、值班費、衛福部津貼、年終及年終獎金；前五項標記為經常性收入。
+- 輸出金額維持 `number`，沒有整合 API decimal string、月份 response validator、Firebase query 或任何 UI／報表呼叫。
+- `tsconfig.json` 啟用 `allowImportingTsExtensions`，讓 Node 單元測試可直接載入共用 TypeScript 模組；專案仍維持 `noEmit`。
+
+驗證結果：
+
+- 原有測試 19/19 通過，新增工作收入測試 10/10 通過，全部共 29/29 通過。
+- ESLint、TypeScript typecheck、Next.js production build 與 `git diff --check` 均通過。
+- 未修改或連線 Firebase、Firestore、Authentication、Vercel 或正式資料。
+
+尚待產品確認：工作收入未來對外整合是否只限 Chris、是否需要兩人分開摘要，以及所有收入的幣別語意。確認前不得讓正式收入畫面、統計或 API 依賴候選 policy。
