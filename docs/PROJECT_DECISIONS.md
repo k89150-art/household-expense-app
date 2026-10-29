@@ -63,3 +63,11 @@
 - 資料：Seed 僅使用虛構帳號與資料，UID 由 Authentication Emulator 產生並同步寫入 `households/default-household.memberIds`。
 - Rules：本機測試載入現有 `firebase/firestore.rules`；不得為了測試通過而放寬或修改正式 Rules。
 - 限制：目前 Rules 不驗證子集合 schema，只保護登入、家庭成員與 `householdId`；是否補強欄位驗證需另案評估，本階段不處理。
+
+## D-010 Git 換行格式規則
+
+- 日期：2026-10-29
+- 決策：專案統一使用 LF 換行；`.cmd`、`.bat`、`.ps1` 等 Windows 腳本保留 CRLF；圖片、字型、PDF、壓縮檔等明確標記為 binary，不做換行轉換。
+- 規則來源：以 repo 根目錄的 `.gitattributes` 為共同換行規則，優先於個別電腦的 `core.autocrlf` 設定。Codex 與 Claude 都必須遵守，不得在檔案內另行改變換行格式。
+- 既有檔案：導入時不立即正規化。目前 `src/app/globals.css`、`src/components/FirestoreHomeSummary.tsx`、`src/components/IncomeForm.tsx`、`src/components/RecurringExpensePanel.tsx`、`src/lib/records.ts` 在 repo 中為 CRLF／LF 混用，暫時維持原狀。
+- 限制：未來執行 `git add --renormalize` 時，必須取得使用者授權並獨立提交，並以 `git diff --cached --ignore-cr-at-eol` 確認只有換行差異；不得把換行正規化混入任何功能修改。
