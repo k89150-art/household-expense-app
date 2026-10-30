@@ -98,3 +98,21 @@
 - 回滾基準：部署前備份 `家庭記帳-Rules備份\firestore.rules.prod-20261029.rules.txt`（SHA-256 `5412BE69EE1D4B824D59D4B5CCE0A06F8FAB813F20BE3170F121558F821C7E08`，內容等於 Git `965c4c3`）。
 - 決策：之後 Rules 部署一律遵守：部署前重新從 Console 備份並比對；差異只能是當次授權的修改；只用 `--only firestore:rules`；不從 GitHub main（目前仍為 `af1282f` 版本）部署。
 - 尚未完成：正式環境完整 CRUD 驗收、R3／R4、正式與開發 Firebase 環境隔離。
+
+## D-014 GitHub main 同步正式 R1 Rules
+
+- 日期：2026-10-30
+- 背景：R1 已於 2026-10-29 部署到正式 Firebase `household-expense-app-8102d`（來源 commit `1335b2e`）。D-011（家庭文件不開放客戶端寫入）、D-012（Rules 以正式線上版本為相容基準）、D-013（R1 部署紀錄與 Rules 部署程序）記錄在開發分支 `feature/phase1-income-foundation`。
+- 決策：以獨立分支 `chore/sync-r1-rules` 只同步 `firebase/firestore.rules`，讓 main 與正式線上 Rules 一致；不合併整個 Phase 1 分支。
+- 移除 `existingBelongsToHousehold()`：目的是恢復與正式線上 Rules 一致，不是放寬或新增權限。這項限制只存在於從未部署的 Git `af1282f` 版本；是否採用需另案審查並取得授權。
+- Rules 部署程序（同 D-013）：部署前重新從 Firebase Console 備份並比對；差異只能是當次授權的修改；只使用 `--only firestore:rules`；未完成同步前不得從舊版 main 部署 Rules。
+- 限制：Phase 1 其他功能仍保留於開發分支，需另案驗收後再整合。
+
+## D-015 R1 上線完成與後續優先順序
+
+- 日期：2026-10-30
+- 事實：GitHub main 已同步至 `3db867a`，其 `firebase/firestore.rules` 與正式部署的 R1 一致；Vercel Production Deployment（main、`3db867a`）成功，狀態 Ready；使用者已完成正式網站讀取驗收。
+- 說明：D-013 中「不從 GitHub main（目前仍為 `af1282f` 版本）部署」的前提已因同步而解除；D-013 的部署程序本身仍然有效。D-014 原文來自 main 分支，原樣併入本分支。
+- 決策：`feature/phase1-income-foundation` 繼續維持獨立，不併入 main；Phase 1 程式碼需另案驗收後再整合。
+- 後續優先順序：先完成正式環境權限驗收（兩位成員的完整新增、修改、刪除與私人支出權限），再規劃 Firebase 開發／正式環境隔離；R3、R4 在環境隔離完成後再評估。
+- 文件整合：main 與開發分支的交接文件日後合併時，以開發分支版本為準（已包含 main 的 2026-10-30 紀錄與 D-014 原文）。

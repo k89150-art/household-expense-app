@@ -174,7 +174,7 @@ node scripts/seed-firebase-emulator.mjs
 - 真實 Firebase Emulator 測試 31/31 通過（原有 16 項＋R1 新增 15 項）。
 - 反向驗證：把 Rules 換回 `13111a0` 版本時，R1 測試 20–26 失敗；27–31 也連帶失敗，因為舊 Rules 讓前面的測試真的刪除／覆寫了家庭文件，證明測試能偵測 H1／M1。
 - ESLint、TypeScript `--noEmit`、Next.js production build 均通過。
-- 使用者本機驗證：待執行。
+- 使用者本機驗證：待執行。（後續：`cc3e54e` 版 Rules 未部署，改由下一節正式相容版部署。）
 
 尚未解決的 Rules 問題：
 
@@ -182,7 +182,7 @@ node scripts/seed-firebase-emulator.mjs
 - L1–L5：`createdBy` 可偽造、時間戳記未驗證、成員可修改彼此紀錄、被移出成員仍可存取本人私人明細、無欄位白名單。
 - 已知相容性問題（本階段只記錄、未修復）：讀取不存在的子集合文件會被拒絕，`upsertRecurringExpenseTemplate()` 新增模板前的 `getDoc` 會失敗並退回本機模板；已以測試 30 記錄目前行為，留待 R2 決定。（更正：此問題只存在於未部署的 Git `af1282f` 版本，正式環境沒有；`cc3e54e` 的 Rules 檔不可直接部署，見下一節與 D-012。）
 
-部署狀態：R1 只在本機 Emulator 驗證，**尚未部署到正式 Firebase**；正式 Rules 仍為舊版。部署需使用者另行授權，並先保存目前正式 Rules 作為回滾版本。
+部署狀態：R1 只在本機 Emulator 驗證，**尚未部署到正式 Firebase**；正式 Rules 仍為舊版。部署需使用者另行授權，並先保存目前正式 Rules 作為回滾版本。（後續：正式相容版已於 2026-10-29 部署，見「R1 正式部署紀錄」與「R1 最終上線與 GitHub 同步完成」。）
 
 更正：上一節「階段 3 新增或修改的檔案在工作樹中使用 CRLF」不完全正確；新增的 `scripts/`、`tests/emulator/` 檔案為 LF，換行規則現以 `.gitattributes`（D-010）為準。
 
@@ -204,9 +204,9 @@ node scripts/seed-firebase-emulator.mjs
 - 真實 Firebase Emulator 測試 37/37 通過（原有 16＋R1 15＋正式相容 6），Emulator 正常關閉。
 - 反向驗證：以 `cc3e54e` 的 Git 版 Rules 執行時，第 13、30、32、34–37 項失敗，證明測試能分辨 `af1282f` 與正式行為；以正式備份原樣執行時，正式相容測試 32–37 全部通過，R1 測試 20–26 失敗（27–31 因家庭文件已被前面的測試真的刪除或覆寫而連帶失敗），證明 H1／M1 在線上仍存在。
 - ESLint、TypeScript `--noEmit`、Next.js production build、`git diff --check` 均通過。
-- 使用者本機驗證：待執行。
+- 使用者本機驗證：待執行。（後續：使用者於部署前在本機執行，單元測試 29/29、Emulator 37/37 通過，見「R1 正式部署紀錄」。）
 
-部署狀態：尚未部署。部署前須重新從 Console 備份線上 Rules、確認與 repo 差異只有 R1，並取得使用者授權；只使用 `--only firestore:rules`。
+部署狀態：尚未部署。部署前須重新從 Console 備份線上 Rules、確認與 repo 差異只有 R1，並取得使用者授權；只使用 `--only firestore:rules`。（後續：已於 2026-10-29 部署。）
 
 ## 2026-10-29 Phase 1 階段 4：R1 正式部署紀錄
 
@@ -240,7 +240,55 @@ node scripts/seed-firebase-emulator.mjs
 
 下一位 AI 接手注意：
 
-- 正式線上 Rules 現在等於 repo `1335b2e` 的 `firebase/firestore.rules`。GitHub main（`9f44860`）的 Rules 仍是未部署的 `af1282f` 版本，**不可從 main 部署 Rules**，否則會撤銷 R1 並帶入未授權限制。
+- 正式線上 Rules 現在等於 repo `1335b2e` 的 `firebase/firestore.rules`。GitHub main（`9f44860`）的 Rules 仍是未部署的 `af1282f` 版本，**不可從 main 部署 Rules**，否則會撤銷 R1 並帶入未授權限制。（2026-10-30 後續：GitHub main 已同步至 `3db867a`，其 Rules 與正式 R1 一致，此風險已解除；部署 Rules 仍須遵守 D-013。）
 - 回滾方式：在 Console 規則歷史選回 R1 前版本，或發布上述備份檔內容；回滾前先確認備份 SHA-256。
 - 每次部署 Rules 前，都要重新從 Console 備份線上版本，確認與 repo 的差異只有本次授權的修改，且只用 `--only firestore:rules`。
-- 本分支尚未 push，也尚未合併 main。
+- 本分支尚未 push，也尚未合併 main。（2026-10-30 後續：本分支仍未 push、未合併；只有 R1 Rules 另以 `chore/sync-r1-rules` 同步到 main。）
+
+## 2026-10-30 GitHub main 同步正式 R1 Firestore Rules
+
+（本節為 main 分支 `3db867a` 的原文，原樣併入本分支以保持兩邊紀錄一致；只在「狀態」一行補充後續說明。）
+
+- 分支：`chore/sync-r1-rules`，從本機 main `96f8e033be7076ac0a0c4652db976ea43e6d0bf7` 建立；沒有從 Phase 1 開發分支建立。
+- 正式 Firebase Project ID：`household-expense-app-8102d`，資料庫 `(default)`。
+- R1 已正式部署：使用者於 2026-10-29 以 Firebase CLI 15.34.2、`--only firestore:rules` 部署；來源為開發分支 `feature/phase1-income-foundation` 的 commit `1335b2ea7881d8f107e932b63118da1da7510631`，部署紀錄 commit 為 `9dfc5ab51237bb7c91d59868ad78c106a8dd0d6d`。Firebase Console 已確認生效，正式網站讀取正常。
+- 本分支只把 `firebase/firestore.rules` 換成 `9dfc5ab` 的完整檔案（Git blob `5aecbbbe2e2be00075a06bb11aeaa2a081c4a5b9`），讓 GitHub main 與目前正式線上 Rules 一致。
+- 同步原因：GitHub main（`9f44860`）原本的 Rules 是從未部署的 `af1282f` 版本。若之後從 main 部署 Rules，會撤銷 R1，並帶入未經授權的限制。
+- 本次 Rules 差異：
+  - `households/{householdId}`：成員可讀；客戶端不可 create、update、delete（R1）。
+  - 移除 `existingBelongsToHousehold()` 及其在子集合 read／delete、update 的兩處引用。**這是恢復與正式線上 Rules（Git `965c4c3`）一致，不是新增未授權的權限變更**；正式環境從未使用這項限制。
+  - 收入、支出、固定支出等 11 個子集合的其他條件，以及 `privateExpenseDetails` 規則，與正式線上版本逐字一致。
+- 相容性依據：候選 Rules 與使用者從 Firebase Console 備份的部署前正式 Rules（SHA-256 `5412BE69EE1D4B824D59D4B5CCE0A06F8FAB813F20BE3170F121558F821C7E08`，內容等於 Git `965c4c3`）相比，只差 R1 兩行；同一份 Rules 已在開發分支通過 Firebase Emulator 37/37。
+- 不在本分支：Phase 1 的收入型別、工作收入純函式、Firebase Emulator 測試環境與測試、`.gitattributes`，以及它們的 `package.json`、`pnpm-lock.yaml`、`tsconfig.json` 修改，仍保留在 `feature/phase1-income-foundation`，尚未整合到 main。
+- 未修改：`src/`、`tests/`、`firebase.json`、Firestore indexes、Vercel 設定、正式 Firebase 資料。
+- 狀態：同步分支尚未 push，也尚未合併到 main。（2026-10-30 後續：已 fast-forward 合併到本機 main 並 push；GitHub main 為 `3db867a`，Vercel Production 已部署成功。）依 Vercel 設定（Production Branch 為 `main`），push main 會建立新的 Production Deployment；網站程式不變，但仍需在 push 後確認正式網站正常。
+- 未來 Rules 部署必須遵守 D-013（記錄於開發分支；摘要見本分支 D-014）：部署前重新從 Console 備份並比對、差異只能是當次授權的修改、只用 `--only firestore:rules`。
+
+## 2026-10-30 R1 最終上線與 GitHub 同步完成
+
+以下為使用者實際操作並確認的結果；Claude 沒有正式 Firebase、Vercel 或 GitHub 寫入權限，只做唯讀審查與準備指令。
+
+- R1 正式 Firebase 部署成功：專案 `household-expense-app-8102d`、資料庫 `(default)`，2026-10-29 以 `--only firestore:rules` 部署開發分支 `1335b2e` 的 Rules；Firebase Console 已確認生效。
+- GitHub main 已同步至 `3db867a275eb134fadaf33ee4c00ddec4d4db0bd`：由 `chore/sync-r1-rules` fast-forward 合併到本機 main 後 push，只推送 `96f8e03` 與 `3db867a` 兩個 commit，沒有使用 force。
+- Vercel Production Deployment 成功：Branch `main`、Commit `3db867a`、狀態 Ready。
+- 使用者已確認正式網站正常。
+- 本次 GitHub 同步沒有把 Phase 1 程式碼併入 main：main 只多了 `AGENTS.md`、交接文件與 `firebase/firestore.rules`；`src/`、`package.json`、`pnpm-lock.yaml`、`tsconfig.json`、Emulator 測試與 `.gitattributes` 仍只在 `feature/phase1-income-foundation`。
+- R1 Rules 與 GitHub main 版本一致：main、開發分支 `9dfc5ab`、部署來源 `1335b2e` 的 `firebase/firestore.rules` 是同一個 Git blob `5aecbbbe2e2be00075a06bb11aeaa2a081c4a5b9`。
+
+各分支狀態（2026-10-30）：
+
+- GitHub main／本機 main：`3db867a`。
+- `chore/sync-r1-rules`：`3db867a`（已合併，保留作為紀錄）。
+- `feature/phase1-income-foundation`：`9dfc5ab`（未 push、未合併；本節文件提交後會前進）。
+
+尚未完成：
+
+- 正式環境完整 CRUD 權限驗收尚未完成（目前只確認讀取正常）：收入、支出、私人支出、固定支出模板、代墊、刷卡繳款的新增、修改、刪除，兩位成員各自驗收，以及 Console 規則模擬器紀錄。
+- Firebase 開發／正式環境隔離尚未開始：`src/lib/firebase.ts` 仍以正式設定為預設值，App 無法連接 Emulator。
+- R3（新建立資料的欄位驗證）、R4（修改時的欄位驗證）尚未開始；M2、L1–L5 仍未處理；`af1282f` 的 `existingBelongsToHousehold()` 是否採用仍待另案評估。
+- main 上的交接文件仍保留「同步分支尚未 push」的舊敘述；之後整合 main 與開發分支的文件時一併更新（見 D-015）。
+
+下一位 AI 接手注意：
+
+- 未來部署 Rules 仍須遵守 D-013：部署前重新從 Console 備份並比對、差異只能是當次授權的修改、只用 `--only firestore:rules`。
+- main 與開發分支的交接文件都是在共同祖先 `96f8e03` 的檔案結尾各自追加，日後合併必定在文件結尾衝突；本分支已原樣併入 main 的 2026-10-30 同步紀錄與 D-014，解衝突時以本分支版本為準，不會遺失 main 的紀錄。
