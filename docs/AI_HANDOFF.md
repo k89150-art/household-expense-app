@@ -59,3 +59,20 @@ pnpm install --frozen-lockfile --node-linker=hoisted --package-import-method=cop
 pnpm 12 會因供應鏈政策阻止 `@firebase/util`、`protobufjs`、`sharp`、`unrs-resolver` 的安裝 scripts；本次沒有擅自修改允許清單。即使忽略 scripts，現有 test、lint、typecheck、build 與 dev server 均已通過。若未來確定需要這些 postinstall scripts，應另案審查後再設定 `onlyBuiltDependencies`。
 
 目前的 hoisted＋copy `node_modules` 沒有發現 reparse point，但約佔數百 MiB，OneDrive 仍會同步大量可重建檔案。建議後續固定使用同一安裝方式，且不要把 `node_modules` 或 `.next` 納入歷史封存。
+
+## 2026-10-30 GitHub main 同步正式 R1 Firestore Rules
+
+- 分支：`chore/sync-r1-rules`，從本機 main `96f8e033be7076ac0a0c4652db976ea43e6d0bf7` 建立；沒有從 Phase 1 開發分支建立。
+- 正式 Firebase Project ID：`household-expense-app-8102d`，資料庫 `(default)`。
+- R1 已正式部署：使用者於 2026-10-29 以 Firebase CLI 15.34.2、`--only firestore:rules` 部署；來源為開發分支 `feature/phase1-income-foundation` 的 commit `1335b2ea7881d8f107e932b63118da1da7510631`，部署紀錄 commit 為 `9dfc5ab51237bb7c91d59868ad78c106a8dd0d6d`。Firebase Console 已確認生效，正式網站讀取正常。
+- 本分支只把 `firebase/firestore.rules` 換成 `9dfc5ab` 的完整檔案（Git blob `5aecbbbe2e2be00075a06bb11aeaa2a081c4a5b9`），讓 GitHub main 與目前正式線上 Rules 一致。
+- 同步原因：GitHub main（`9f44860`）原本的 Rules 是從未部署的 `af1282f` 版本。若之後從 main 部署 Rules，會撤銷 R1，並帶入未經授權的限制。
+- 本次 Rules 差異：
+  - `households/{householdId}`：成員可讀；客戶端不可 create、update、delete（R1）。
+  - 移除 `existingBelongsToHousehold()` 及其在子集合 read／delete、update 的兩處引用。**這是恢復與正式線上 Rules（Git `965c4c3`）一致，不是新增未授權的權限變更**；正式環境從未使用這項限制。
+  - 收入、支出、固定支出等 11 個子集合的其他條件，以及 `privateExpenseDetails` 規則，與正式線上版本逐字一致。
+- 相容性依據：候選 Rules 與使用者從 Firebase Console 備份的部署前正式 Rules（SHA-256 `5412BE69EE1D4B824D59D4B5CCE0A06F8FAB813F20BE3170F121558F821C7E08`，內容等於 Git `965c4c3`）相比，只差 R1 兩行；同一份 Rules 已在開發分支通過 Firebase Emulator 37/37。
+- 不在本分支：Phase 1 的收入型別、工作收入純函式、Firebase Emulator 測試環境與測試、`.gitattributes`，以及它們的 `package.json`、`pnpm-lock.yaml`、`tsconfig.json` 修改，仍保留在 `feature/phase1-income-foundation`，尚未整合到 main。
+- 未修改：`src/`、`tests/`、`firebase.json`、Firestore indexes、Vercel 設定、正式 Firebase 資料。
+- 狀態：同步分支尚未 push，也尚未合併到 main。依 Vercel 設定（Production Branch 為 `main`），push main 會建立新的 Production Deployment；網站程式不變，但仍需在 push 後確認正式網站正常。
+- 未來 Rules 部署必須遵守 D-013（記錄於開發分支；摘要見本分支 D-014）：部署前重新從 Console 備份並比對、差異只能是當次授權的修改、只用 `--only firestore:rules`。
