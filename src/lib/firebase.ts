@@ -22,6 +22,8 @@ export { app };
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const firebaseProjectId = firebaseRuntime.firebase.projectId;
+/** 已通過 resolveFirebaseConfig 驗證的執行環境；角色判斷只能使用這個值。 */
+export const firebaseAppEnv = firebaseRuntime.appEnv;
 
 if (firebaseRuntime.emulator) {
   const { host, authPort, firestorePort } = firebaseRuntime.emulator;

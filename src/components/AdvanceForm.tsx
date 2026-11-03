@@ -3,11 +3,11 @@
 import { useMemo, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
 import { localDateString } from "@/lib/date";
-import { Viewer, getViewerByEmail } from "@/lib/household";
+import type { Viewer } from "@/lib/household";
 import { addAdvanceRecord, CreditCardName } from "@/lib/records";
 import { PaymentMethod } from "@/types/domain";
 
-type Props = { viewer?: Viewer; onSaved?: () => void };
+type Props = { viewer: Viewer; onSaved?: () => void };
 type AdvanceStatus = "待處理" | "已送件" | "已收回";
 
 function getCards(viewer: Viewer): CreditCardName[] {
@@ -16,7 +16,8 @@ function getCards(viewer: Viewer): CreditCardName[] {
 
 export function AdvanceForm({ viewer, onSaved }: Props) {
   const user = useCurrentUser();
-  const owner = viewer ?? getViewerByEmail(user?.email);
+  // 角色由 MemberRoleGate 判定後傳入；不再以 Email 自行推斷（P3-C3）
+  const owner = viewer;
   const cards = useMemo(() => getCards(owner), [owner]);
   const [date, setDate] = useState(localDateString());
   const [item, setItem] = useState("");
