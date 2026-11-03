@@ -8,9 +8,12 @@ import {
   EMULATOR_FIREBASE_PROJECT_ID,
   FIRESTORE_EMULATOR_PORT,
   FirebaseConfigError,
+  PRODUCTION_FIREBASE_API_KEY_SHA256,
   PRODUCTION_FIREBASE_PROJECT_ID,
+  PRODUCTION_FIREBASE_PROJECT_NUMBER,
   initializeValidatedFirebaseApp,
   resolveFirebaseConfig,
+  sha256Hex,
 } from "../src/lib/firebaseConfig.ts";
 
 // 全部為虛構值；不連線任何真實 Firebase。
@@ -22,8 +25,9 @@ const production = Object.freeze({
   authDomain: `${PROD}.firebaseapp.com`,
   projectId: PROD,
   storageBucket: `${PROD}.firebasestorage.app`,
-  messagingSenderId: "000000000001",
-  appId: "1:000000000001:web:fakeproduction",
+  // 專案編號是正式專案的公開識別碼（非機密）；API Key 仍為虛構值
+  messagingSenderId: PRODUCTION_FIREBASE_PROJECT_NUMBER,
+  appId: `1:${PRODUCTION_FIREBASE_PROJECT_NUMBER}:web:fakeproduction`,
 });
 
 const development = Object.freeze({
@@ -354,4 +358,126 @@ test("22. 實際 Firebase 初始化沒有 fallback，且 Auth／Firestore 只能
   assert.ok(firestoreCall > validationCall, "getFirestore 必須在設定驗證後呼叫");
   assert.doesNotMatch(source, /\?\?/, "Firebase 設定不得使用 nullish fallback");
   assert.doesNotMatch(source, /AIza[0-9A-Za-z_-]{10,}/, "firebase.ts 不得硬編碼 API Key");
+});
+
+// ---- P3-C2：不只依 projectId 判斷，防止正式 API Key／App ID／Sender ID 混入 ----
+
+const NON_PRODUCTION_BASES = {
+  development,
+  preview: { ...development, appEnv: "preview" },
+  emulator,
+};
+
+/** 正式 API Key 不寫進任何追蹤檔；測試時從本機 Git 歷史（main 3db867a 舊版 firebase.ts）取出。 */
+async function productionApiKeyFromGitHistory() {
+  const { execFileSync } = await import("node:child_process");
+  let source;
+  try {
+    source = execFileSync("git", ["show", "3db867a275eb134fadaf33ee4c00ddec4d4db0bd:src/lib/firebase.ts"], {
+      cwd: new URL("..", import.meta.url),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    assert.fail("無法從本機 Git 歷史讀取正式設定（需要 main 3db867a）；此測試不可略過");
+  }
+  const match = /apiKey:[^"]*"([^"]+)"/.exec(source);
+  assert.ok(match, "Git 歷史中找不到正式 apiKey");
+  return match[1];
+}
+
+test("23. sha256Hex 與 node:crypto 結果一致（含區塊邊界與多位元組字元）", async () => {
+  const { createHash } = await import("node:crypto");
+  const samples = ["", "a", "abc", "家庭記帳", "x".repeat(55), "x".repeat(56), "x".repeat(63), "x".repeat(64), "y".repeat(1000)];
+  for (const sample of samples) {
+    assert.equal(sha256Hex(sample), createHash("sha256").update(sample, "utf8").digest("hex"), `長度 ${sample.length}`);
+  }
+});
+
+test("24. 正式 API Key 指紋確實對應正式金鑰，且原始碼只保存指紋", async () => {
+  const productionApiKey = await productionApiKeyFromGitHistory();
+  assert.ok(PRODUCTION_FIREBASE_API_KEY_SHA256.includes(sha256Hex(productionApiKey)));
+  assert.ok(PRODUCTION_FIREBASE_API_KEY_SHA256.every((hash) => /^[0-9a-f]{64}$/.test(hash)));
+  const { readFile } = await import("node:fs/promises");
+  const raw = await readFile(new URL("../src/lib/firebaseConfig.ts", import.meta.url), "utf8");
+  assert.ok(!raw.includes(productionApiKey), "firebaseConfig.ts 不得包含正式 apiKey 原文");
+});
+
+test("25. 非 production 混入正式 API Key 一律拒絕", async () => {
+  const productionApiKey = await productionApiKeyFromGitHistory();
+  for (const [name, base] of Object.entries(NON_PRODUCTION_BASES)) {
+    try {
+      resolveFirebaseConfig({ ...base, apiKey: productionApiKey });
+      assert.fail(`${name} 混入正式 apiKey 卻通過`);
+    } catch (error) {
+      assert.ok(error instanceof FirebaseConfigError, String(error));
+      assert.equal(error.code, "PRODUCTION_CREDENTIAL_FORBIDDEN", `${name}：${error.message}`);
+      assert.ok(!error.message.includes(productionApiKey), "錯誤訊息不得包含 apiKey");
+    }
+  }
+});
+
+test("26. 非 production 混入正式 Sender ID＋App ID（同一正式專案編號）一律拒絕", () => {
+  const productionIdentity = {
+    messagingSenderId: PRODUCTION_FIREBASE_PROJECT_NUMBER,
+    appId: `1:${PRODUCTION_FIREBASE_PROJECT_NUMBER}:web:d3796bc59e24cb79d0932a`,
+  };
+  for (const base of Object.values(NON_PRODUCTION_BASES)) {
+    expectCode(() => resolveFirebaseConfig({ ...base, ...productionIdentity }), "PRODUCTION_CREDENTIAL_FORBIDDEN");
+  }
+});
+
+test("27. 只混入正式 App ID 或只混入正式 Sender ID：專案編號不一致而拒絕", () => {
+  for (const base of Object.values(NON_PRODUCTION_BASES)) {
+    expectCode(
+      () => resolveFirebaseConfig({ ...base, appId: `1:${PRODUCTION_FIREBASE_PROJECT_NUMBER}:web:d3796bc59e24cb79d0932a` }),
+      "APP_ID_SENDER_MISMATCH",
+    );
+    expectCode(() => resolveFirebaseConfig({ ...base, messagingSenderId: PRODUCTION_FIREBASE_PROJECT_NUMBER }), "APP_ID_SENDER_MISMATCH");
+  }
+  // production 的 App ID 或 Sender ID 換成其他專案編號
+  expectCode(() => resolveFirebaseConfig({ ...production, appId: "1:000000000002:web:fakedevelopment" }), "APP_ID_SENDER_MISMATCH");
+  expectCode(() => resolveFirebaseConfig({ ...production, messagingSenderId: "000000000002" }), "APP_ID_SENDER_MISMATCH");
+});
+
+test("28. production 必須使用正式專案編號；Sender ID／App ID 來自其他專案即拒絕", () => {
+  expectCode(
+    () => resolveFirebaseConfig({ ...production, messagingSenderId: "000000000002", appId: "1:000000000002:web:fakedevelopment" }),
+    "PRODUCTION_PROJECT_NUMBER_MISMATCH",
+  );
+  assert.equal(resolveFirebaseConfig(production).firebase.messagingSenderId, PRODUCTION_FIREBASE_PROJECT_NUMBER);
+});
+
+test("29. Sender ID 與 App ID 格式錯誤一律拒絕", () => {
+  for (const messagingSenderId of ["abc", "12a", "-1", "1.5"]) {
+    expectCode(() => resolveFirebaseConfig({ ...development, messagingSenderId }), "INVALID_VALUE");
+  }
+  for (const appId of ["000000000002", "1:000000000002:ios:abc", "2:000000000002:web:abc", "1:000000000002:web:", "1:000000000002:web:ab-cd", "1::web:abc"]) {
+    expectCode(() => resolveFirebaseConfig({ ...development, appId }), "INVALID_VALUE");
+  }
+});
+
+test("30. development／preview 只接受開發專案的 Firebase 預設網域", () => {
+  for (const appEnv of ["development", "preview"]) {
+    const base = { ...development, appEnv };
+    assert.equal(resolveFirebaseConfig({ ...base, authDomain: `${DEVELOPMENT_FIREBASE_PROJECT_ID}.web.app` }).appEnv, appEnv);
+    assert.equal(resolveFirebaseConfig({ ...base, storageBucket: `${DEVELOPMENT_FIREBASE_PROJECT_ID}.appspot.com` }).appEnv, appEnv);
+    expectCode(() => resolveFirebaseConfig({ ...base, authDomain: "auth.example.test" }), "DOMAIN_PROJECT_MISMATCH");
+    expectCode(() => resolveFirebaseConfig({ ...base, storageBucket: "bucket.example.test" }), "DOMAIN_PROJECT_MISMATCH");
+  }
+});
+
+test("31. 不是只看 projectId：開發 projectId 配上其他專案的完整 Web App 設定也拒絕", async () => {
+  const productionApiKey = await productionApiKeyFromGitHistory();
+  const disguised = {
+    ...development,
+    apiKey: productionApiKey,
+    messagingSenderId: PRODUCTION_FIREBASE_PROJECT_NUMBER,
+    appId: `1:${PRODUCTION_FIREBASE_PROJECT_NUMBER}:web:d3796bc59e24cb79d0932a`,
+  };
+  expectCode(() => resolveFirebaseConfig(disguised), "PRODUCTION_CREDENTIAL_FORBIDDEN");
+  expectCode(() => resolveFirebaseConfig({ ...disguised, appEnv: "preview" }), "PRODUCTION_CREDENTIAL_FORBIDDEN");
+  let initializeCalls = 0;
+  expectCode(() => initializeValidatedFirebaseApp(disguised, [], () => { initializeCalls += 1; return { options: {} }; }), "PRODUCTION_CREDENTIAL_FORBIDDEN");
+  assert.equal(initializeCalls, 0, "設定被拒絕時不可初始化 Firebase");
 });
