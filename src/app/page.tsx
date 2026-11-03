@@ -28,16 +28,16 @@ const DAILY_QUOTES = [
 ];
 
 /**
- * 登入後、任何 Firestore 讀寫之前的角色關卡（P3-C3）。
- * 所有會讀寫 Firestore 的元件都在 HouseholdApp 之內；角色無法確認時完全不掛載 HouseholdApp。
+ * 登入後、任何 Firestore 讀寫之前的角色關卡：雙帳號 UID 白名單（NEXT_PUBLIC_MEMBER_ROLES）。
+ * 所有會讀寫 Firestore 的元件都在 HouseholdApp 之內；不在白名單時完全不掛載 HouseholdApp。
+ * 資料存取另由 Firestore Rules 的 memberIds 在伺服器端強制。
  */
 function MemberRoleGate() {
   const user = useCurrentUser();
   const resolution = resolveMemberRole({
     appEnv: firebaseAppEnv,
     uid: user?.uid,
-    email: user?.email,
-    developmentRoleMap: process.env.NEXT_PUBLIC_DEV_MEMBER_ROLES,
+    memberRoleMap: process.env.NEXT_PUBLIC_MEMBER_ROLES,
   });
 
   if (!resolution.ok) {
@@ -47,7 +47,7 @@ function MemberRoleGate() {
           <h1>一起記</h1>
           <p className="muted">{resolution.message}</p>
           <p className="muted">錯誤代碼：{resolution.code}</p>
-          {user?.uid ? <p className="muted">目前登入帳號在開發專案的 UID：{user.uid}</p> : null}
+          {user?.uid ? <p className="muted">目前登入帳號的 UID（設定白名單用）：{user.uid}</p> : null}
         </section>
       </main>
     );

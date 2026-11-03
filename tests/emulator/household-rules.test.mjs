@@ -316,3 +316,61 @@ test("R1 compatibility: private expense batch write and owner-only access are un
   cleanup.delete(expenseRef);
   await assertSucceeds(cleanup.commit());
 });
+
+test("雙帳號白名單：第三個 UID 與未登入者對所有集合的讀、查詢、新增、修改、刪除一律被拒絕", async () => {
+  const collections = [
+    "expenses",
+    "incomes",
+    "investments",
+    "advances",
+    "cardPayments",
+    "livingTransfers",
+    "recurringExpenses",
+    "creditCards",
+    "creditCardBills",
+    "prepaidAccounts",
+    "prepaidSettlements",
+    "privateExpenseDetails",
+  ];
+  // 以 Rules 停用的管理身分先建立每個集合各一筆（模擬兩位成員的既有資料）
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    for (const name of collections) {
+      await setDoc(doc(context.firestore(), `${householdPath}/${name}/whitelist-existing`), {
+        householdId: TEST_HOUSEHOLD_ID,
+        ownerId: users.member.uid,
+        amount: 100,
+      });
+    }
+  });
+
+  for (const [label, db] of [["第三個 UID", outsiderDb()], ["未登入", anonymousDb()]]) {
+    await assertFails(getDoc(doc(db, householdPath)));
+    for (const name of collections) {
+      const existing = doc(db, `${householdPath}/${name}/whitelist-existing`);
+      await assertFails(getDoc(existing), `${label} 不得讀取 ${name}`);
+      await assertFails(getDocs(query(collection(db, `${householdPath}/${name}`), where("householdId", "==", TEST_HOUSEHOLD_ID))), `${label} 不得查詢 ${name}`);
+      await assertFails(setDoc(doc(db, `${householdPath}/${name}/whitelist-new`), {
+        householdId: TEST_HOUSEHOLD_ID,
+        ownerId: users.outsider.uid,
+        amount: 1,
+      }), `${label} 不得新增 ${name}`);
+      await assertFails(updateDoc(existing, { amount: 999 }), `${label} 不得修改 ${name}`);
+      await assertFails(deleteDoc(existing), `${label} 不得刪除 ${name}`);
+    }
+  }
+
+  // 既有資料完全未被改動，白名單（memberIds）仍只有兩位成員
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    for (const name of collections) {
+      const snapshot = await getDoc(doc(context.firestore(), `${householdPath}/${name}/whitelist-existing`));
+      assert.equal(snapshot.data()?.amount, 100, `${name} 既有資料不得被改動`);
+      assert.equal((await getDoc(doc(context.firestore(), `${householdPath}/${name}/whitelist-new`))).exists(), false);
+    }
+  });
+  await assertHouseholdUnchanged();
+
+  // 兩位成員仍可讀取（白名單內的帳號不受影響）
+  for (const db of [memberDb(), partnerDb()]) {
+    await assertSucceeds(getDoc(doc(db, `${householdPath}/expenses/whitelist-existing`)));
+  }
+});
