@@ -65,6 +65,7 @@ function usesPreviousMonthInsuranceDate(item: RecurringItem) {
 const DEFAULT_ITEMS: RecurringItem[] = [
   { id: "mortgage", name: "房貸", category: "房貸", amount: 25000, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
   { id: "personal-loan", name: "信貸", category: "信貸", amount: 0, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
+  { id: "home-equity-loan", name: "房屋增貸", category: "房屋增貸", amount: 11000, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
   { id: "hospital-parking", name: "醫院停車月租", category: "停車費", amount: 0, target: "self", paymentMethod: "信用卡", creditCard: "中信", visibleFor: ["chris"] },
   { id: "mobile-chris", name: "手機門號費", category: "手機門號費", amount: 699, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
   { id: "mobile-wife", name: "手機門號費", category: "手機門號費", amount: 699, target: "self", paymentMethod: "銀行扣款", visibleFor: ["wife"] },
