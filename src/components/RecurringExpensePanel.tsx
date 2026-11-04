@@ -64,9 +64,9 @@ function usesPreviousMonthInsuranceDate(item: RecurringItem) {
 
 const DEFAULT_ITEMS: RecurringItem[] = [
   { id: "mortgage", name: "房貸", category: "房貸", amount: 25000, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
-  { id: "personal-loan", name: "信貸", category: "信貸", amount: 0, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
   { id: "home-equity-loan", name: "房屋增貸", category: "房屋增貸", amount: 11000, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
-  { id: "hospital-parking", name: "醫院停車月租", category: "停車費", amount: 0, target: "self", paymentMethod: "信用卡", creditCard: "中信", visibleFor: ["chris"] },
+  { id: "management-fee", name: "管理費", category: "管理費", amount: 2500, target: "self", paymentMethod: "現金", visibleFor: ["chris"] },
+  { id: "internet", name: "網路費", category: "網路費", amount: 999, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
   { id: "mobile-chris", name: "手機門號費", category: "手機門號費", amount: 699, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
   { id: "mobile-wife", name: "手機門號費", category: "手機門號費", amount: 699, target: "self", paymentMethod: "銀行扣款", visibleFor: ["wife"] },
   { id: "insurance-self-chris", name: "保險：我", category: "保險", amount: 4200, target: "self", paymentMethod: "信用卡", creditCard: "台新", visibleFor: ["chris"] },
@@ -74,11 +74,35 @@ const DEFAULT_ITEMS: RecurringItem[] = [
   { id: "insurance-junyao", name: "保險：竣堯", category: "保險", amount: 1500, target: "junyao", paymentMethod: "信用卡", creditCard: "台新", visibleFor: ["chris"] },
   { id: "school-fee", name: "竣堯學費", category: "學費", amount: 12000, target: "junyao", paymentMethod: "轉帳", visibleFor: ["chris", "wife"] },
   { id: "after-school-care", name: "竣堯延托費", category: "學費", amount: 2500, target: "junyao", paymentMethod: "轉帳", visibleFor: ["wife"] },
-  { id: "management-fee", name: "管理費", category: "管理費", amount: 2500, target: "self", paymentMethod: "現金", visibleFor: ["chris"] },
-  { id: "internet", name: "網路費", category: "網路費", amount: 999, target: "self", paymentMethod: "銀行扣款", visibleFor: ["chris"] },
+  { id: "hospital-parking", name: "醫院停車月租", category: "停車費", amount: 0, target: "self", paymentMethod: "信用卡", creditCard: "中信", visibleFor: ["chris"] },
 ];
 
 const STORAGE_KEY = "household-expense-recurring-items";
+
+/** 已移除的預設項目（例如信貸）：雲端或本機殘留的舊模板一律略過，不顯示也不再寫回。 */
+const REMOVED_TEMPLATE_IDS = new Set(["personal-loan"]);
+
+function isActiveTemplate(item: RecurringItem) {
+  return !REMOVED_TEMPLATE_IDS.has(item.id);
+}
+
+/** 固定支出分組與順序：依 DEFAULT_ITEMS 排列；個人訂閱固定放最後。 */
+const DEFAULT_ORDER = new Map(DEFAULT_ITEMS.map((item, index) => [item.id, index]));
+
+function templateGroup(item: RecurringItem) {
+  if (isSubscriptionItem(item)) return "訂閱";
+  if (item.id === "mortgage" || item.id === "home-equity-loan" || item.id === "management-fee") return "居住";
+  if (item.id === "internet" || item.id.startsWith("mobile-")) return "通訊";
+  if (item.category === "保險") return "保險";
+  if (item.target === "junyao") return "竣堯";
+  if (item.id === "hospital-parking") return "交通";
+  return "其他";
+}
+
+function templateRank(item: RecurringItem) {
+  if (isSubscriptionItem(item)) return 2;
+  return DEFAULT_ORDER.has(item.id) ? 0 : 1;
+}
 
 function normalizeRecurringItem(item: RecurringItem): RecurringItem {
   if (item.id === "mobile-chris" || item.id === "mobile-wife") {
@@ -100,7 +124,7 @@ function normalizeRecurringItem(item: RecurringItem): RecurringItem {
 }
 
 function mergeDefaultItems(storedItems: RecurringItem[]) {
-  const normalizedItems = storedItems.map(normalizeRecurringItem);
+  const normalizedItems = storedItems.filter(isActiveTemplate).map(normalizeRecurringItem);
   const existingIds = new Set(normalizedItems.map((item) => item.id));
   const missingDefaults = DEFAULT_ITEMS.filter((item) => !existingIds.has(item.id));
   return [...normalizedItems, ...missingDefaults];
@@ -140,10 +164,21 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => item.visibleFor.includes(viewer))
     .sort((a, b) =>
-      Number(isSubscriptionItem(a.item)) - Number(isSubscriptionItem(b.item)) ||
+      templateRank(a.item) - templateRank(b.item) ||
+      (DEFAULT_ORDER.get(a.item.id) ?? 0) - (DEFAULT_ORDER.get(b.item.id) ?? 0) ||
       a.index - b.index
     )
     .map(({ item }) => item), [items, viewer]);
+  const groupedVisibleItems = useMemo(() => {
+    const groups: [string, RecurringItem[]][] = [];
+    for (const item of visibleItems) {
+      const group = templateGroup(item);
+      const last = groups.at(-1);
+      if (last && last[0] === group) last[1].push(item);
+      else groups.push([group, [item]]);
+    }
+    return groups;
+  }, [visibleItems]);
   const creditCards = useMemo(() => getNormalCreditCards(viewer), [viewer]);
   const [selectedId, setSelectedId] = useState("");
   const [amountDraft, setAmountDraft] = useState("");
@@ -175,7 +210,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
       setIsTemplateLoading(true);
       try {
         const cloudItems = await getRecurringExpenseTemplates();
-        const normalizedCloudItems = cloudItems.map(normalizeRecurringItem);
+        const normalizedCloudItems = cloudItems.filter(isActiveTemplate).map(normalizeRecurringItem);
         const seedItems = normalizedCloudItems.length > 0 ? mergeDefaultItems(normalizedCloudItems) : mergeDefaultItems(loadStoredItems());
         const cloudById = new Map(normalizedCloudItems.map((item) => [item.id, item]));
         const templatesToSave = normalizedCloudItems.length === 0
@@ -383,7 +418,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
       <label className="field">
         <span>選擇固定支出</span>
         <select className="select" value={selectedItem?.id ?? ""} onChange={(event) => setSelectedId(event.target.value)}>
-          {visibleItems.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          {groupedVisibleItems.map(([group, groupItems]) => <optgroup key={group} label={group}>{groupItems.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</optgroup>)}
         </select>
       </label>
 

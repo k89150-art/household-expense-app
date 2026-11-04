@@ -11,18 +11,16 @@ import {
   getExpenseRecordsByMonth,
   getIncomeRecordsByDateRange,
   getIncomeRecordsByMonth,
-  getInvestmentRecordsByDateRange,
-  getInvestmentRecordsByMonth,
   updateAdvanceRecord,
 } from "@/lib/records";
-import type { AdvanceRecord, CardPaymentRecord, ExpenseRecord, IncomeRecord, InvestmentRecord } from "@/lib/records";
+import type { AdvanceRecord, CardPaymentRecord, ExpenseRecord, IncomeRecord } from "@/lib/records";
 
 type ReportLine = {
   label: string;
   amount: number;
 };
 
-type SearchKind = "all" | "expense" | "income" | "investment" | "advance" | "cardPayment";
+type SearchKind = "all" | "expense" | "income" | "advance" | "cardPayment";
 type SearchOwner = "all" | "chris" | "wife";
 type ReportScope = "month" | "year";
 type SearchRecord = {
@@ -39,7 +37,6 @@ type SearchRecord = {
 const SEARCH_KIND_LABELS: Record<SearchRecord["kind"], string> = {
   expense: "支出",
   income: "收入",
-  investment: "投資",
   advance: "代墊",
   cardPayment: "繳款",
 };
@@ -86,7 +83,6 @@ export function HouseholdReport() {
   const [reportScope, setReportScope] = useState<ReportScope>("month");
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [incomes, setIncomes] = useState<IncomeRecord[]>([]);
-  const [investments, setInvestments] = useState<InvestmentRecord[]>([]);
   const [advances, setAdvances] = useState<AdvanceRecord[]>([]);
   const [reimbursements, setReimbursements] = useState<AdvanceRecord[]>([]);
   const [cardPayments, setCardPayments] = useState<CardPaymentRecord[]>([]);
@@ -106,16 +102,14 @@ export function HouseholdReport() {
         const selectedYear = selectedMonth.slice(0, 4);
         const startDate = `${selectedYear}-01-01`;
         const endDate = `${selectedYear}-12-31`;
-        const [expenseData, incomeData, investmentData, allAdvanceData, cardPaymentData] = await Promise.all([
+        const [expenseData, incomeData, allAdvanceData, cardPaymentData] = await Promise.all([
           reportScope === "month" ? getExpenseRecordsByMonth(selectedMonth) : getExpenseRecordsByDateRange(startDate, endDate),
           reportScope === "month" ? getIncomeRecordsByMonth(selectedMonth) : getIncomeRecordsByDateRange(startDate, endDate),
-          reportScope === "month" ? getInvestmentRecordsByMonth(selectedMonth) : getInvestmentRecordsByDateRange(startDate, endDate),
           getAllAdvanceRecords(),
           reportScope === "month" ? getCardPaymentRecordsByMonth(selectedMonth) : getCardPaymentRecordsByDateRange(startDate, endDate),
         ]);
         setExpenses(expenseData);
         setIncomes(incomeData);
-        setInvestments(investmentData);
         setAdvances(allAdvanceData.filter((record) => record.date >= (reportScope === "month" ? `${selectedMonth}-01` : startDate) && record.date <= (reportScope === "month" ? `${selectedMonth}-31` : endDate)));
         setReimbursements(reimbursedAdvancesForPeriod(allAdvanceData, reportScope === "month" ? `${selectedMonth}-01` : startDate, reportScope === "month" ? `${selectedMonth}-31` : endDate));
         setCardPayments(cardPaymentData);
@@ -138,8 +132,7 @@ export function HouseholdReport() {
     const reimbursedAdvance = sum(reimbursements);
     const cardPaymentTotal = sum(cardPayments);
     const incomeTotal = sum(incomes);
-    const investmentTotal = sum(investments);
-    const totalOutflow = livingExpense + paidNowAdvance + cardPaymentTotal + investmentTotal;
+    const totalOutflow = livingExpense + paidNowAdvance + cardPaymentTotal;
     const cashFlow = incomeTotal - totalOutflow + reimbursedAdvance;
     const categoryLines = toLines(groupTotal(expenses, (record) => record.category));
     const payerLines = toLines(groupTotal(expenses, (record) => record.paidBy === "chris" ? "我付款" : "太太付款"));
@@ -152,7 +145,6 @@ export function HouseholdReport() {
       livingExpense,
       creditCardExpense,
       cardPaymentTotal,
-      investmentTotal,
       advanceTotal,
       paidNowAdvance,
       reimbursedAdvance,
@@ -162,7 +154,7 @@ export function HouseholdReport() {
       payerLines,
       creditCardLines,
     };
-  }, [advances, cardPayments, expenses, incomes, investments, reimbursements]);
+  }, [advances, cardPayments, expenses, incomes, reimbursements]);
 
   async function handleUndoAdvanceReimbursement(record: AdvanceRecord) {
     if (!window.confirm(`確定要把「${record.item}」改回已送件，並取消這筆收回款嗎？`)) return;
@@ -208,16 +200,6 @@ export function HouseholdReport() {
       owner: record.owner,
       searchable: [record.date, record.category, record.note, record.owner === "chris" ? "先生" : "太太"].filter(Boolean).join(" ").toLocaleLowerCase("zh-TW"),
     }));
-    const investmentRecords: SearchRecord[] = investments.map((record) => ({
-      id: `investment-${record.id}`,
-      kind: "investment",
-      date: record.date,
-      title: record.name,
-      detail: `${record.type}・${record.owner === "chris" ? "先生" : "太太"}`,
-      amount: record.amount,
-      owner: record.owner,
-      searchable: [record.date, record.type, record.name, record.note, record.owner === "chris" ? "先生" : "太太"].filter(Boolean).join(" ").toLocaleLowerCase("zh-TW"),
-    }));
     const advanceRecords: SearchRecord[] = advances.map((record) => ({
       id: `advance-${record.id}`,
       kind: "advance",
@@ -238,9 +220,9 @@ export function HouseholdReport() {
       owner: record.owner,
       searchable: [record.date, record.card, "信用卡 繳款", record.billMonth, record.note, record.owner === "chris" ? "先生" : "太太"].filter(Boolean).join(" ").toLocaleLowerCase("zh-TW"),
     }));
-    return [...expenseRecords, ...incomeRecords, ...investmentRecords, ...advanceRecords, ...paymentRecords]
+    return [...expenseRecords, ...incomeRecords, ...advanceRecords, ...paymentRecords]
       .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
-  }, [advances, cardPayments, expenses, incomes, investments]);
+  }, [advances, cardPayments, expenses, incomes]);
 
   const filteredSearchRecords = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLocaleLowerCase("zh-TW");
@@ -298,7 +280,7 @@ export function HouseholdReport() {
         <article><span>收入</span><strong>{money(report.incomeTotal)}</strong></article>
         <article><span>{reportScope === "month" ? "本月現金流" : "年度現金流"}</span><strong className={report.cashFlow >= 0 ? "positive" : "negative"}>{money(report.cashFlow)}</strong></article>
         <article><span>生活支出</span><strong>{money(report.livingExpense)}</strong></article>
-        <article><span>投資</span><strong>{money(report.investmentTotal)}</strong></article>
+        <article><span>信用卡繳款</span><strong>{money(report.cardPaymentTotal)}</strong></article>
       </section>
 
       <article className="panel report-breakdown">
@@ -311,10 +293,9 @@ export function HouseholdReport() {
         <div className="report-stack">
           <div><span>生活</span><strong>{money(report.livingExpense)}</strong></div>
           <div><span>信用卡繳款</span><strong>{money(report.cardPaymentTotal)}</strong></div>
-          <div><span>投資</span><strong>{money(report.investmentTotal)}</strong></div>
           <div><span>現付代墊</span><strong>{money(report.paidNowAdvance)}</strong></div>
         </div>
-        <p className="muted">公式：收入 - 現付生活支出 - 現付代墊 - 信用卡繳款 - 投資 + 已收回代墊 = {money(report.cashFlow)}</p>
+        <p className="muted">公式：收入 - 現付生活支出 - 現付代墊 - 信用卡繳款 + 已收回代墊 = {money(report.cashFlow)}</p>
         <p className="muted">{reportScope === "month" ? "本月" : "本年度"}刷卡消費：{money(report.creditCardExpense)}；已收回代墊：{money(report.reimbursedAdvance)}</p>
       </article>
 
@@ -405,7 +386,7 @@ export function HouseholdReport() {
         <div className="journal-head compact">
           <div>
             <h2>明細搜尋</h2>
-            <p>搜尋{periodSearchLabel}的支出、收入、投資、代墊與信用卡繳款。</p>
+            <p>搜尋{periodSearchLabel}的支出、收入、代墊與信用卡繳款。</p>
           </div>
         </div>
         <div className="report-search-controls">
@@ -419,7 +400,6 @@ export function HouseholdReport() {
               <option value="all">全部類型</option>
               <option value="expense">支出</option>
               <option value="income">收入</option>
-              <option value="investment">投資</option>
               <option value="advance">代墊</option>
               <option value="cardPayment">信用卡繳款</option>
             </select>

@@ -11,19 +11,16 @@ import {
   deleteCardPaymentRecord,
   deleteExpenseRecord,
   deleteIncomeRecord,
-  deleteInvestmentRecord,
   getAllAdvanceRecords,
   getAllCardPaymentRecords,
   getAllExpenseRecords,
   getAllIncomeRecords,
-  getAllInvestmentRecords,
   getCardPaymentRecordsByBillMonth,
   getCardPaymentRecordsFromBillMonth,
   getCardPaymentRecordsByMonth,
   getCreditCardExpenseRecords,
   getExpenseRecordsByMonth,
   getIncomeRecordsByMonth,
-  getInvestmentRecordsByMonth,
   getLegacyInstallmentRecords,
   updateAdvanceRecord,
   updateExpenseRecord,
@@ -37,7 +34,6 @@ import type {
   IncomeRecord,
   InstallmentInfo,
   InstallmentScheduleItem,
-  InvestmentRecord,
   LegacyInstallmentRecord,
 } from "@/lib/records";
 import type { Viewer } from "@/lib/household";
@@ -260,7 +256,6 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [scope, setScope] = useState<Scope>("month");
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [incomes, setIncomes] = useState<IncomeRecord[]>([]);
-  const [investments, setInvestments] = useState<InvestmentRecord[]>([]);
   const [advances, setAdvances] = useState<AdvanceRecord[]>([]);
   const [allAdvances, setAllAdvances] = useState<AdvanceRecord[]>([]);
   const [dueAdvances, setDueAdvances] = useState<AdvanceRecord[]>([]);
@@ -272,7 +267,6 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [openedTarget, setOpenedTarget] = useState<string | null>(null);
   const [openedCategory, setOpenedCategory] = useState<string | null>(null);
   const [showIncomes, setShowIncomes] = useState(false);
-  const [showInvestments, setShowInvestments] = useState(false);
   const [showAdvances, setShowAdvances] = useState(false);
   const [showCreditCards, setShowCreditCards] = useState(false);
   const [creditCardTab, setCreditCardTab] = useState<CreditCardTab>("unbilled");
@@ -290,10 +284,9 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     try {
       const dueBillMonth = shiftMonth(selectedMonth, -1);
       const activityRange = cardActivityRange([dueBillMonth, selectedMonth]);
-      const [expenseData, incomeData, investmentData, allAdvanceData, allCardExpenseData, paymentData, duePaymentData, legacyInstallmentData] = await Promise.all([
+      const [expenseData, incomeData, allAdvanceData, allCardExpenseData, paymentData, duePaymentData, legacyInstallmentData] = await Promise.all([
         scope === "month" ? getExpenseRecordsByMonth(selectedMonth) : getAllExpenseRecords(),
         scope === "month" ? getIncomeRecordsByMonth(selectedMonth) : getAllIncomeRecords(),
-        scope === "month" ? getInvestmentRecordsByMonth(selectedMonth) : getAllInvestmentRecords(),
         getAllAdvanceRecords(),
         getCreditCardExpenseRecords(),
         scope === "month" ? getCardPaymentRecordsByMonth(selectedMonth) : getAllCardPaymentRecords(),
@@ -320,7 +313,6 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       }));
       setExpenses(expenseData);
       setIncomes(incomeData);
-      setInvestments(investmentData);
       setAdvances(scope === "month" ? allAdvanceData.filter((record) => record.date.startsWith(selectedMonth)) : allAdvanceData);
       setAllAdvances(allAdvanceData);
       setDueAdvances(allAdvanceData.filter((record) => record.date >= activityRange.startDate && record.date <= activityRange.endDate));
@@ -374,11 +366,6 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   async function handleDeleteIncome(id: string) {
     if (!window.confirm("確定要刪除這筆收入嗎？")) return;
     await runMutation("刪除收入", () => deleteIncomeRecord(id));
-  }
-
-  async function handleDeleteInvestment(id: string) {
-    if (!window.confirm("確定要刪除這筆投資紀錄嗎？")) return;
-    await runMutation("刪除投資紀錄", () => deleteInvestmentRecord(id));
   }
 
   async function handleDeleteAdvance(id: string) {
@@ -493,7 +480,6 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const dueBillMonth = shiftMonth(selectedMonth, -1);
   const totalIncome = incomes.reduce((sum, record) => sum + record.amount, 0);
   const paidNowExpense = expenses.filter((record) => record.paymentMethod !== "credit_card").reduce((sum, record) => sum + record.amount, 0);
-  const totalInvestment = investments.reduce((sum, record) => sum + record.amount, 0);
   const pendingAdvanceRecords = advances.filter((record) => record.status !== "已收回");
   const paidNowAdvance = advances.filter((record) => record.paymentMethod !== "credit_card").reduce((sum, record) => sum + record.amount, 0);
   const pendingAdvance = pendingAdvanceRecords.reduce((sum, record) => sum + record.amount, 0);
@@ -508,16 +494,14 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const ownCreditCardExpenses = useMemo(() => allCreditCardExpenses.filter((record) => record.paidBy === viewer), [allCreditCardExpenses, viewer]);
   const ownIncome = incomes.filter((record) => record.owner === viewer).reduce((sum, record) => sum + record.amount, 0);
   const ownPaidNowExpense = expenses.filter((record) => record.paymentMethod !== "credit_card" && record.paidBy === viewer).reduce((sum, record) => sum + record.amount, 0);
-  const ownInvestment = investments.filter((record) => record.owner === viewer).reduce((sum, record) => sum + record.amount, 0);
   const ownPaidNowAdvance = advances.filter((record) => record.paymentMethod !== "credit_card" && record.owner === viewer).reduce((sum, record) => sum + record.amount, 0);
   const ownReimbursedAdvance = reimbursementRecords.filter((record) => record.owner === viewer).reduce((sum, record) => sum + record.amount, 0);
   const cardPaymentTotal = ownCardPayments.reduce((sum, record) => sum + record.amount, 0);
   const advanceCashFlow = paidNowAdvance - reimbursedAdvance;
-  const familyAvailableBalance = totalIncome - paidNowExpense - paidNowAdvance - totalCardPayment - totalInvestment + reimbursedAdvance;
-  const personalCashFlow = ownIncome - ownPaidNowExpense - ownPaidNowAdvance - cardPaymentTotal - ownInvestment + ownReimbursedAdvance;
+  const familyAvailableBalance = totalIncome - paidNowExpense - paidNowAdvance - totalCardPayment + reimbursedAdvance;
+  const personalCashFlow = ownIncome - ownPaidNowExpense - ownPaidNowAdvance - cardPaymentTotal + ownReimbursedAdvance;
   const groupedTargets = useMemo(() => groupByTarget(expenses), [expenses]);
   const groupedIncomes = useMemo(() => groupByOwner(incomes), [incomes]);
-  const groupedInvestments = useMemo(() => groupByOwner(investments), [investments]);
   const activeLegacyInstallments = useMemo(() => legacyInstallments.filter((record) => record.isActive && (record.owner ?? "chris") === viewer), [legacyInstallments, viewer]);
   const creditCardGroups = useMemo(() => groupDueCreditCardBills(ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, selectedMonth), [ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, selectedMonth]);
   const dueCreditCardGroups = useMemo(() => groupDueCreditCardBills(ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, dueBillMonth), [ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, dueBillMonth]);
@@ -611,7 +595,6 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
         <div className="row"><span>本月收入</span><strong>{money(totalIncome)}</strong></div>
         <div className="row"><span>已付生活支出</span><strong>{money(paidNowExpense)}</strong></div>
         <div className="row"><span>家庭信用卡繳款</span><strong>{money(totalCardPayment)}</strong></div>
-        <div className="row"><span>投資</span><strong>{money(totalInvestment)}</strong></div>
         {advanceCashFlow !== 0 ? <div className="row"><span>代墊款現金流</span><strong>{money(advanceCashFlow)}</strong></div> : null}
         <p className="muted" style={{ margin: 0 }}>家庭剩餘用共同帳本計算；我的現金流只看本人收入、本人付款與本人信用卡繳款。</p>
         {isLoading ? <p className="muted">讀取中...</p> : null}
@@ -663,23 +646,6 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           })}</div> : null}
         </article>;
       })}
-
-      <article className="card grid">
-        <button className="row" type="button" onClick={() => setShowInvestments((value) => !value)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
-          <div><h2 style={{ margin: 0 }}>投資紀錄</h2><div className="muted">不列入生活支出，點一下看明細</div></div>
-          <strong>{money(totalInvestment)}</strong>
-        </button>
-        {showInvestments ? <div className="grid">
-          {investments.length === 0 ? <p className="muted">這個月份沒有投資紀錄</p> : null}
-          {Object.entries(groupedInvestments).map(([owner, ownerRecords]) => <div className="card grid" style={{ boxShadow: "none" }} key={owner}>
-            <div className="row"><strong>{ownerLabel(owner as "chris" | "wife", viewer)}</strong><strong>{money(ownerRecords.reduce((sum, record) => sum + record.amount, 0))}</strong></div>
-            {ownerRecords.map((record) => <div className="record-row" key={record.id}>
-              <span className="record-title">{record.date.slice(5)}　{record.type}・{record.name}{record.note ? `・${record.note}` : ""}</span>
-              <span className="record-actions"><span className="muted">{money(record.amount)}</span><button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteInvestment(record.id)}>刪除</button></span>
-            </div>)}
-          </div>)}
-        </div> : null}
-      </article>
 
       <article className="card grid">
         <button className="row" type="button" onClick={() => setShowCreditCards((value) => !value)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>

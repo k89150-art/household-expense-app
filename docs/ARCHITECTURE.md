@@ -12,7 +12,6 @@
 
 - `ExpenseQuickForm`：支出、信用卡消費與一般分期
 - `IncomeForm`：收入
-- `InvestmentForm`：投資
 - `AdvanceForm`：代墊款
 - `RecurringExpensePanel`：固定支出範本與記帳前分期
 
@@ -37,7 +36,7 @@ households/default-household
 | --- | --- | --- |
 | `expenses` | 一般支出、刷卡消費、一般分期 | `date`, `amount`, `category`, `target`, `paidBy`, `paymentMethod`, `creditCard`, `installment` |
 | `incomes` | 收入 | `date`, `amount`, `owner`, `category` |
-| `investments` | 投資 | `date`, `amount`, `owner`, `type`, `name` |
+| `investments` | 投資（已停用：介面與計算不再使用，舊資料保留） | `date`, `amount`, `owner`, `type`, `name` |
 | `advances` | 代墊 | `date`, `amount`, `owner`, `status`, `reimbursedDate`, `paymentMethod` |
 | `cardPayments` | 已建立的信用卡繳款 | `card`, `owner`, `billMonth`, `paidDate`, `amount`, `legacyInstallmentAdjustments` |
 | `creditCardBills` | 記帳前就存在的分期 | `kind`, `card`, `amount`, `totalInstallments`, `nextInstallmentNo`, `nextBillMonth`, `isActive` |

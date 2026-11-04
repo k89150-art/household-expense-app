@@ -356,7 +356,7 @@ h2 {
 
 .choice-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1045,27 +1045,21 @@ textarea {
 }
 
 .quick-menu button:nth-child(1) {
-  left: 41px;
-  bottom: 24px;
+  left: 48px;
+  bottom: 30px;
   transition-delay: 20ms;
 }
 
 .quick-menu button:nth-child(2) {
-  left: 101px;
-  bottom: 78px;
-  transition-delay: 55ms;
+  left: calc(50% - 29px);
+  bottom: 74px;
+  transition-delay: 60ms;
 }
 
 .quick-menu button:nth-child(3) {
-  right: 101px;
-  bottom: 78px;
-  transition-delay: 90ms;
-}
-
-.quick-menu button:nth-child(4) {
-  right: 41px;
-  bottom: 24px;
-  transition-delay: 125ms;
+  right: 48px;
+  bottom: 30px;
+  transition-delay: 100ms;
 }
 
 .compose {
@@ -1177,11 +1171,6 @@ textarea {
 .record-kind-badge.income {
   background: rgba(80, 126, 105, 0.12);
   color: #315f4c;
-}
-
-.record-kind-badge.investment {
-  background: rgba(91, 64, 82, 0.12);
-  color: var(--fig);
 }
 
 .record-kind-badge.advance {
@@ -1445,7 +1434,7 @@ textarea {
   }
 
   .choice-grid {
-    grid-template-columns: repeat(4, minmax(96px, 1fr));
+    grid-template-columns: repeat(3, minmax(96px, 1fr));
   }
 
   .desktop-hidden-choice {

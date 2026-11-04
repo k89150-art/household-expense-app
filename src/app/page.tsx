@@ -7,7 +7,6 @@ import { ExpenseQuickForm } from "@/components/ExpenseQuickForm";
 import { FirestoreHomeSummary } from "@/components/FirestoreHomeSummary";
 import { HouseholdReport } from "@/components/HouseholdReport";
 import { IncomeForm } from "@/components/IncomeForm";
-import { InvestmentForm } from "@/components/InvestmentForm";
 import { PrepaidSettlementForm } from "@/components/PrepaidSettlementForm";
 import { RecurringExpensePanel } from "@/components/RecurringExpensePanel";
 import { firebaseAppEnv } from "@/lib/firebase";
@@ -15,7 +14,7 @@ import type { Viewer } from "@/lib/household";
 import { resolveMemberRole } from "@/lib/memberRoles";
 
 type Tab = "home" | "add" | "fixed" | "report";
-type AddMode = "expense" | "income" | "investment" | "advance" | "fixed";
+type AddMode = "expense" | "income" | "advance" | "fixed";
 
 const DAILY_QUOTES = [
   "今天先記一筆，未來的自己會感謝你。",
@@ -122,13 +121,11 @@ function HouseholdApp({ viewer }: { viewer: Viewer }) {
               <button className={addMode === "expense" ? "choice active" : "choice"} type="button" onClick={() => setAddMode("expense")}>支出</button>
               <button className={addMode === "fixed" ? "choice active desktop-hidden-choice" : "choice desktop-hidden-choice"} type="button" onClick={openFixed}>固定</button>
               <button className={addMode === "income" ? "choice active" : "choice"} type="button" onClick={() => setAddMode("income")}>收入</button>
-              <button className={addMode === "investment" ? "choice active" : "choice"} type="button" onClick={() => setAddMode("investment")}>投資</button>
               <button className={addMode === "advance" ? "choice active" : "choice"} type="button" onClick={() => setAddMode("advance")}>代墊</button>
             </div>
           </div>
           {addMode === "expense" ? <ExpenseQuickForm viewer={viewer} onSaved={refreshRecords} /> : null}
           {addMode === "income" ? <IncomeForm viewer={viewer} onSaved={refreshRecords} /> : null}
-          {addMode === "investment" ? <InvestmentForm viewer={viewer} onSaved={refreshRecords} /> : null}
           {addMode === "advance" ? <AdvanceForm viewer={viewer} onSaved={refreshRecords} /> : null}
           {addMode === "fixed" ? <RecurringExpensePanel viewer={viewer} /> : null}
           {addMode === "expense" ? (
@@ -154,7 +151,6 @@ function HouseholdApp({ viewer }: { viewer: Viewer }) {
       <div className={isQuickMenuOpen ? "quick-menu open" : "quick-menu"} aria-label="快速新增">
         <button type="button" onClick={() => openAdd("expense")}>支出</button>
         <button type="button" onClick={() => openAdd("income")}>收入</button>
-        <button type="button" onClick={() => openAdd("investment")}>投資</button>
         <button type="button" onClick={openFixed}>固定</button>
       </div>
 

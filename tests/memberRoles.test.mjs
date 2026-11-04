@@ -144,14 +144,14 @@ test("W10. 頁面結構：登入（AuthGate）→ 白名單關卡 → 才掛載�
   assert.doesNotMatch(gate, /records|getDocs|addDoc|setDoc|updateDoc|deleteDoc/, "關卡本身不得讀寫 Firestore");
   const beforeApp = page.slice(0, page.indexOf("function HouseholdApp"));
   const app = page.slice(page.indexOf("function HouseholdApp"));
-  for (const component of ["FirestoreHomeSummary", "ExpenseQuickForm", "IncomeForm", "InvestmentForm", "AdvanceForm", "RecurringExpensePanel", "PrepaidSettlementForm", "HouseholdReport"]) {
+  for (const component of ["FirestoreHomeSummary", "ExpenseQuickForm", "IncomeForm", "AdvanceForm", "RecurringExpensePanel", "PrepaidSettlementForm", "HouseholdReport"]) {
     assert.ok(!beforeApp.includes(`<${component}`), `${component} 不得在白名單關卡之前掛載`);
     assert.ok(app.includes(`<${component}`), `${component} 應在 HouseholdApp 內`);
   }
 });
 
 test("W11. 表單必須由上層傳入角色，不再自行推斷", async () => {
-  for (const file of ["src/components/AdvanceForm.tsx", "src/components/IncomeForm.tsx", "src/components/InvestmentForm.tsx"]) {
+  for (const file of ["src/components/AdvanceForm.tsx", "src/components/IncomeForm.tsx"]) {
     const text = await source(file);
     assert.match(text, /viewer: Viewer;/, `${file} 的 viewer 必須是必填`);
     assert.doesNotMatch(text, /viewer\?: Viewer|viewer \?\?/);
