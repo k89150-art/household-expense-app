@@ -10,10 +10,12 @@ import { IncomeForm } from "@/components/IncomeForm";
 import { InvestmentForm } from "@/components/InvestmentForm";
 import { PrepaidSettlementForm } from "@/components/PrepaidSettlementForm";
 import { RecurringExpensePanel } from "@/components/RecurringExpensePanel";
+import { firebaseAppEnv } from "@/lib/firebase";
+import type { Viewer } from "@/lib/household";
+import { resolveMemberRole } from "@/lib/memberRoles";
 
 type Tab = "home" | "add" | "fixed" | "report";
 type AddMode = "expense" | "income" | "investment" | "advance" | "fixed";
-type Viewer = "chris" | "wife";
 
 const DAILY_QUOTES = [
   "今天先記一筆，未來的自己會感謝你。",
@@ -25,13 +27,40 @@ const DAILY_QUOTES = [
   "好好生活的計畫，從一筆小小的紀錄開始。",
 ];
 
-function HouseholdApp() {
+/**
+ * 登入後、任何 Firestore 讀寫之前的角色關卡：雙帳號 UID 白名單（NEXT_PUBLIC_MEMBER_ROLES）。
+ * 所有會讀寫 Firestore 的元件都在 HouseholdApp 之內；不在白名單時完全不掛載 HouseholdApp。
+ * 資料存取另由 Firestore Rules 的 memberIds 在伺服器端強制。
+ */
+function MemberRoleGate() {
   const user = useCurrentUser();
+  const resolution = resolveMemberRole({
+    appEnv: firebaseAppEnv,
+    uid: user?.uid,
+    memberRoleMap: process.env.NEXT_PUBLIC_MEMBER_ROLES,
+  });
+
+  if (!resolution.ok) {
+    return (
+      <main className="auth-screen">
+        <section className="auth-card">
+          <h1>一起記</h1>
+          <p className="muted">{resolution.message}</p>
+          <p className="muted">錯誤代碼：{resolution.code}</p>
+          {user?.uid ? <p className="muted">目前登入帳號的 UID（設定白名單用）：{user.uid}</p> : null}
+        </section>
+      </main>
+    );
+  }
+
+  return <HouseholdApp viewer={resolution.viewer} />;
+}
+
+function HouseholdApp({ viewer }: { viewer: Viewer }) {
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [addMode, setAddMode] = useState<AddMode>("expense");
   const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const viewer: Viewer = user?.email === "k89150@gmail.com" ? "chris" : "wife";
 
   const monthText = useMemo(() => new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "2-digit" }).format(new Date()).replace("/", " / "), []);
   const quote = useMemo(() => DAILY_QUOTES[new Date().getDate() % DAILY_QUOTES.length], []);
@@ -141,7 +170,7 @@ function HouseholdApp() {
 export default function HomePage() {
   return (
     <AuthGate>
-      <HouseholdApp />
+      <MemberRoleGate />
     </AuthGate>
   );
 }

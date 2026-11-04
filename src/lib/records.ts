@@ -3,10 +3,11 @@ import { cardPaymentDocumentId } from "@/lib/cardBilling";
 import { db } from "@/lib/firebase";
 import { HOUSEHOLD_ID } from "@/lib/household";
 import { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
+import type { IncomeOwner, IncomeRecord } from "@/types/income";
+export type { IncomeCategory, IncomeRecord } from "@/types/income";
 
 export type CreditCardName = "玉山" | "台新" | "國泰" | "中信" | "保費卡";
-export type OwnerKey = "chris" | "wife";
-export type IncomeCategory = "本薪" | "獎勵金" | "加班費" | "值班費" | "衛福部津貼" | "年終" | "年終獎金" | "生活費轉入" | "其他";
+export type OwnerKey = IncomeOwner;
 
 export type InstallmentScheduleItem = {
   billMonth: string;
@@ -37,19 +38,6 @@ export type ExpenseRecord = {
   note?: string;
   isPrivate: boolean;
   privateNote?: string;
-  createdBy: string;
-  createdAt?: unknown;
-  updatedAt?: unknown;
-};
-
-export type IncomeRecord = {
-  id: string;
-  householdId: string;
-  date: string;
-  amount: number;
-  owner: OwnerKey;
-  category: IncomeCategory;
-  note?: string;
   createdBy: string;
   createdAt?: unknown;
   updatedAt?: unknown;

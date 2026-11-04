@@ -3,13 +3,13 @@
 import { useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
 import { localDateString } from "@/lib/date";
-import { Viewer, getViewerByEmail } from "@/lib/household";
+import type { Viewer } from "@/lib/household";
 import { addInvestmentRecord } from "@/lib/records";
 
 type InvestmentType = "定期定額" | "單筆買入" | "股息再投入" | "其他";
 
 type Props = {
-  viewer?: Viewer;
+  viewer: Viewer;
   onSaved?: () => void;
 };
 
@@ -17,7 +17,8 @@ const INVESTMENT_TYPES: InvestmentType[] = ["定期定額", "單筆買入", "股
 
 export function InvestmentForm({ viewer, onSaved }: Props) {
   const user = useCurrentUser();
-  const owner = viewer ?? getViewerByEmail(user?.email);
+  // 角色由 MemberRoleGate 判定後傳入；不再以 Email 自行推斷（P3-C3）
+  const owner = viewer;
   const [date, setDate] = useState(localDateString());
   const [type, setType] = useState<InvestmentType>("定期定額");
   const [name, setName] = useState("");

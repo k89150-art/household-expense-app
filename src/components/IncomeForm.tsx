@@ -3,21 +3,23 @@
 import { useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
 import { localDateString } from "@/lib/date";
-import { Viewer, getViewerByEmail } from "@/lib/household";
+import type { Viewer } from "@/lib/household";
 import { addIncomeRecord } from "@/lib/records";
+import { INCOME_ENTRY_CATEGORIES } from "@/types/income";
 
-type IncomeType = "本薪" | "獎勵金" | "加班費" | "值班費" | "衛福部津貼" | "年終獎金" | "生活費轉入" | "其他";
+type IncomeType = typeof INCOME_ENTRY_CATEGORIES[number];
 
 type Props = {
-  viewer?: Viewer;
+  viewer: Viewer;
   onSaved?: () => void;
 };
 
-const INCOME_TYPES: IncomeType[] = ["本薪", "獎勵金", "加班費", "值班費", "衛福部津貼", "年終獎金", "生活費轉入", "其他"];
+const INCOME_TYPES = INCOME_ENTRY_CATEGORIES;
 
 export function IncomeForm({ viewer, onSaved }: Props) {
   const user = useCurrentUser();
-  const owner = viewer ?? getViewerByEmail(user?.email);
+  // 角色由 MemberRoleGate 判定後傳入；不再以 Email 自行推斷（P3-C3）
+  const owner = viewer;
   const [date, setDate] = useState(localDateString());
   const [incomeType, setIncomeType] = useState<IncomeType>("本薪");
   const [amount, setAmount] = useState("");
