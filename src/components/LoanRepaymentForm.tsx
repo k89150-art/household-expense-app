@@ -57,32 +57,36 @@ export function LoanRepaymentForm({ expense, existing, disabled, onSave, onSetSt
   );
 
   return (
-    <div className="card grid" style={{ boxShadow: "none" }}>
-      <p className="muted">還款明細（連結這筆 {expense.amount.toLocaleString("zh-TW")} 元支出）{isVoid ? "・已作廢" : ""}</p>
-      <label className="field">
+    <div className="card grid compact-form" style={{ boxShadow: "none" }}>
+      <p className="muted compact-form-title">還款明細（連結這筆 {expense.amount.toLocaleString("zh-TW")} 元支出）{isVoid ? "・已作廢" : ""}</p>
+      <div className="compact-form-fields">
+      <label className="field field-pair">
         <span>貸款</span>
         <select className="select" value={draft.loanKey} disabled={isVoid} onChange={(event) => setDraft({ ...draft, loanKey: event.target.value })}>
           {LOAN_KEYS.map((key) => <option key={key} value={key}>{LOAN_KEY_LABELS[key]}</option>)}
         </select>
       </label>
-      <label className="field">
-        <span>應繳日（銀行通知上的期別）</span>
-        <input className="input" type="date" value={draft.dueDate} disabled={isVoid} onChange={(event) => setDraft({ ...draft, dueDate: event.target.value })} />
-      </label>
-      <label className="field">
-        <span>實際扣款日</span>
-        <input className="input" type="date" value={draft.paidDate} disabled={isVoid} onChange={(event) => setDraft({ ...draft, paidDate: event.target.value })} />
-      </label>
-      {number("principal", "本金")}
-      {number("interest", "利息")}
-      {number("fee", "手續費")}
-      <label className="field">
+      <label className="field field-pair">
         <span>確認方式</span>
         <select className="select" value={draft.confirmation} disabled={isVoid} onChange={(event) => setDraft({ ...draft, confirmation: event.target.value })}>
           {LOAN_REPAYMENT_CONFIRMATIONS.map((key) => <option key={key} value={key}>{LOAN_CONFIRMATION_LABELS[key]}</option>)}
         </select>
       </label>
-      <div className="row">
+      <label className="field field-pair">
+        <span>應繳日（銀行通知上的期別）</span>
+        <input className="input" type="date" value={draft.dueDate} disabled={isVoid} onChange={(event) => setDraft({ ...draft, dueDate: event.target.value })} />
+      </label>
+      <label className="field field-pair">
+        <span>實際扣款日</span>
+        <input className="input" type="date" value={draft.paidDate} disabled={isVoid} onChange={(event) => setDraft({ ...draft, paidDate: event.target.value })} />
+      </label>
+      <div className="compact-form-amounts">
+        {number("principal", "本金")}
+        {number("interest", "利息")}
+        {number("fee", "手續費")}
+      </div>
+      </div>
+      <div className="compact-form-actions">
         {isVoid ? null : <button className="btn" type="button" disabled={disabled} onClick={handleSave}>{existing ? "儲存修改" : "建立還款明細"}</button>}
         {existing && !isVoid ? <button className="btn secondary" type="button" disabled={disabled} onClick={() => handleStatus("VOID")}>作廢明細</button> : null}
         {isVoid ? <button className="btn" type="button" disabled={disabled} onClick={() => handleStatus("ACTIVE")}>還原明細</button> : null}

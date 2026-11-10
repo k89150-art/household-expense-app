@@ -605,6 +605,149 @@ textarea {
   padding: 6px 10px;
 }
 
+/* Income / expense rows: date | item | amount on the first line (amount right aligned), details under the item,
+   the action buttons grouped on their own line, never mixed with the amount. Wide rows (container query on the
+   row's own width, so the narrow desktop cards keep the phone layout) put the buttons at the end of the line. */
+.entry-wrap {
+  container-type: inline-size;
+}
+
+.entry-row {
+  display: grid;
+  grid-template-columns: 3.2em minmax(0, 1fr) auto;
+  column-gap: 10px;
+  row-gap: 6px;
+  align-items: baseline;
+}
+
+.entry-date {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.entry-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.entry-amount {
+  justify-self: end;
+  text-align: right;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.entry-meta {
+  grid-column: 2 / -1;
+  min-width: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.entry-buttons {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.entry-btn {
+  width: auto;
+  min-width: 56px;
+  min-height: 36px;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+@container (min-width: 480px) {
+  .entry-row {
+    grid-template-columns: 3.2em minmax(0, 1fr) auto auto;
+  }
+
+  .entry-meta {
+    grid-column: 2 / 4;
+  }
+
+  .entry-buttons {
+    grid-column: 4;
+    grid-row: 1;
+    align-self: center;
+    flex-wrap: nowrap;
+  }
+}
+
+/* Compact edit forms (income edit, loan repayment): two columns, small gaps, inputs keep a 44px touch height. */
+.compact-form {
+  container-type: inline-size;
+  gap: 10px;
+  padding: 12px;
+}
+
+.compact-form-title {
+  margin: 0;
+  font-size: 13px;
+}
+
+.compact-form-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+}
+
+.compact-form .field {
+  gap: 4px;
+}
+
+.compact-form .input,
+.compact-form .select {
+  min-height: 44px;
+  padding-top: 9px;
+  padding-bottom: 9px;
+  border-radius: 14px;
+}
+
+/* Phone: dates, selects and notes take the full row (long values stay readable); wider screens pair them. */
+.compact-form-fields > .field-pair,
+.compact-form-amounts {
+  grid-column: 1 / -1;
+}
+
+.compact-form-amounts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@container (min-width: 420px) {
+  .compact-form-fields > .field-pair {
+    grid-column: auto;
+  }
+}
+
+.compact-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.compact-form-actions .btn {
+  width: auto;
+  flex: 1 1 110px;
+  padding: 10px 12px;
+}
+
+@container (max-width: 239px) {
+  .compact-form-fields,
+  .compact-form-amounts {
+    grid-template-columns: 1fr;
+  }
+}
+
 .credit-card-summary {
   gap: 10px;
 }

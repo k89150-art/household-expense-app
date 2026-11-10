@@ -651,10 +651,12 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           {incomes.length === 0 ? <p className="muted">這個月份沒有收入資料</p> : null}
           {Object.entries(groupedIncomes).map(([owner, ownerRecords]) => <div className="card grid" style={{ boxShadow: "none" }} key={owner}>
             <div className="row"><strong>{ownerLabel(owner as "chris" | "wife", viewer)}</strong><strong>{money(ownerRecords.reduce((sum, record) => sum + record.amount, 0))}</strong></div>
-            {ownerRecords.map((record) => <div className="grid" key={record.id}>
-              <div className="record-row">
-                <span className="record-title">{record.date.slice(5)}　{record.category}{record.note ? `・${record.note}` : ""}</span>
-                <span className="record-actions"><span className="muted">{money(record.amount)}</span><button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => setEditingIncomeId(editingIncomeId === record.id ? null : record.id)}>{editingIncomeId === record.id ? "收合" : "修改"}</button><button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteIncome(record.id)}>刪除</button></span>
+            {ownerRecords.map((record) => <div className="grid entry-wrap" key={record.id}>
+              <div className="entry-row">
+                <span className="entry-date">{record.date.slice(5)}</span>
+                <span className="entry-title">{record.category}{record.note ? `・${record.note}` : ""}</span>
+                <span className="entry-amount">{money(record.amount)}</span>
+                <span className="entry-buttons"><button className="btn secondary entry-btn" type="button" disabled={pendingAction !== null} onClick={() => setEditingIncomeId(editingIncomeId === record.id ? null : record.id)}>{editingIncomeId === record.id ? "收合" : "修改"}</button><button className="btn secondary entry-btn" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteIncome(record.id)}>刪除</button></span>
               </div>
               {editingIncomeId === record.id ? <IncomeEditForm record={record} disabled={pendingAction !== null} onSave={(changes) => handleUpdateIncome(record.id, changes)} onCancel={() => setEditingIncomeId(null)} /> : null}
             </div>)}
@@ -682,11 +684,22 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
               <button className="row" type="button" onClick={() => setOpenedCategory(isCategoryOpen ? null : categoryKey)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
                 <strong>{category}</strong><span className="muted">{money(categoryTotal)}・{isCategoryOpen ? "收合" : "明細"}</span>
               </button>
-              {isCategoryOpen ? <div className="grid">{categoryRecords.map((record) => <div key={record.id}><div className="record-row">
-                <span className="record-title">{record.date.slice(5)}　{record.isPrivate ? "個人雜支" : record.note || record.category}{loanRepayments?.[record.id] ? `・${LOAN_KEY_LABELS[loanRepayments[record.id].loanKey]}${loanRepayments[record.id].status === "VOID" ? "明細已作廢" : `本金 ${money(loanRepayments[record.id].principal)}`}` : ""}</span>
-                <span className="record-actions"><span className="muted">{money(record.amount)}{record.creditCard ? `・${record.creditCard}` : ""}{record.target === "junyao" ? `・${displayPaidBy(record, viewer)}付` : ""}</span>{loanRepayments && (loanRepayments[record.id] || isLoanExpenseCandidate(record)) ? <button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => setEditingRepaymentId(editingRepaymentId === record.id ? null : record.id)}>{editingRepaymentId === record.id ? "收合" : "還款明細"}</button> : null}<button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteExpense(record)}>刪除</button></span>
+              {isCategoryOpen ? <div className="grid">{categoryRecords.map((record) => {
+                const repayment = loanRepayments?.[record.id];
+                const meta = [
+                  repayment ? `${LOAN_KEY_LABELS[repayment.loanKey]}${repayment.status === "VOID" ? "明細已作廢" : `本金 ${money(repayment.principal)}`}` : "",
+                  record.creditCard ?? "",
+                  record.target === "junyao" ? `${displayPaidBy(record, viewer)}付` : "",
+                ].filter(Boolean).join("・");
+                return <div className="entry-wrap" key={record.id}><div className="entry-row">
+                <span className="entry-date">{record.date.slice(5)}</span>
+                <span className="entry-title">{record.isPrivate ? "個人雜支" : record.note || record.category}</span>
+                <span className="entry-amount">{money(record.amount)}</span>
+                {meta ? <span className="entry-meta muted">{meta}</span> : null}
+                <span className="entry-buttons">{loanRepayments && (repayment || isLoanExpenseCandidate(record)) ? <button className="btn secondary entry-btn" type="button" disabled={pendingAction !== null} onClick={() => setEditingRepaymentId(editingRepaymentId === record.id ? null : record.id)}>{editingRepaymentId === record.id ? "收合" : "還款明細"}</button> : null}<button className="btn secondary entry-btn" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteExpense(record)}>刪除</button></span>
               </div>{editingRepaymentId === record.id ? <LoanRepaymentForm expense={record} existing={loanRepayments?.[record.id] ?? null} disabled={pendingAction !== null} onSave={(fields) => handleSaveRepayment(record, fields)} onSetStatus={(status) => handleRepaymentStatus(record, status)} onCancel={() => setEditingRepaymentId(null)} /> : null}
-              </div>)}</div> : null}
+              </div>;
+              })}</div> : null}
             </div>;
           })}</div> : null}
         </article>;

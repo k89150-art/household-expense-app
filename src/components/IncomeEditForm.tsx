@@ -29,8 +29,9 @@ export function IncomeEditForm({ record, disabled, onSave, onCancel }: Props) {
   }
 
   return (
-    <div className="card grid" style={{ boxShadow: "none" }}>
-      <label className="field">
+    <div className="card grid compact-form" style={{ boxShadow: "none" }}>
+      <div className="compact-form-fields">
+      <label className="field field-pair">
         <span>日期</span>
         <input className="input" type="date" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} />
       </label>
@@ -44,11 +45,12 @@ export function IncomeEditForm({ record, disabled, onSave, onCancel }: Props) {
         <span>金額</span>
         <input className="input" type="number" inputMode="decimal" step="1" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} />
       </label>
-      <label className="field">
+      <label className="field field-pair">
         <span>備註</span>
         <input className="input" value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} />
       </label>
-      <div className="row">
+      </div>
+      <div className="compact-form-actions">
         <button className="btn" type="button" disabled={disabled} onClick={handleSave}>儲存修改</button>
         <button className="btn secondary" type="button" disabled={disabled} onClick={onCancel}>取消</button>
       </div>
