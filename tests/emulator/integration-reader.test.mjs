@@ -44,6 +44,7 @@ before(async () => {
     await setDoc(doc(db, `${householdPath}/privateExpenseDetails/reader-probe`), { householdId: TEST_HOUSEHOLD_ID, ownerId: users.member.uid, expenseId: "x", actualItem: "x" });
     await setDoc(doc(db, "households/other-household"), { name: "Other", memberIds: [users.outsider.uid], integrationReaderIds: [] });
     await setDoc(doc(db, "households/other-household/incomes/other-income"), { householdId: "other-household", date: "2026-10-01", amount: 1, owner: "chris", category: "本薪" });
+    await setDoc(doc(db, `${householdPath}/incomes/reader-wife-income`), { householdId: TEST_HOUSEHOLD_ID, date: "2026-10-01", amount: 1, owner: "wife", category: "本薪" });
   });
 });
 
@@ -63,16 +64,23 @@ async function setReaders(uids) {
   });
 }
 
-test("唯讀整合身分：可讀家庭文件與 incomes（get、list、依成員查詢）", async () => {
+test("唯讀整合身分（R3）：可讀家庭文件與本人（owner == chris）的 incomes；太太與其他成員的收入一律拒絕", async () => {
   const db = readerDb();
   const household = await assertSucceeds(getDoc(doc(db, householdPath)));
   assert.deepEqual(household.data().integrationReaderIds, [users.reader.uid]);
   assert.equal(household.data().memberIds.includes(users.reader.uid), false);
   await assertSucceeds(getDoc(doc(db, `${householdPath}/incomes/seed-income`)));
-  const all = await assertSucceeds(getDocs(collection(db, `${householdPath}/incomes`)));
-  assert.ok(all.size >= 2);
   const chris = await assertSucceeds(getDocs(query(collection(db, `${householdPath}/incomes`), where("owner", "==", "chris"))));
+  assert.ok(chris.size >= 1);
   assert.ok(chris.docs.every((d) => d.data().owner === "chris"));
+  // 不帶本人條件的整批查詢、依太太／其他成員查詢、直接讀太太的單筆收入：全部拒絕。
+  await assertFails(getDocs(collection(db, `${householdPath}/incomes`)));
+  await assertFails(getDocs(query(collection(db, `${householdPath}/incomes`), where("owner", "==", "wife"))));
+  await assertFails(getDocs(query(collection(db, `${householdPath}/incomes`), where("owner", "==", "junyao"))));
+  await assertFails(getDoc(doc(db, `${householdPath}/incomes/reader-wife-income`)));
+  // 成員仍可讀全部收入（家庭記帳本身不受影響）。
+  const members = await assertSucceeds(getDocs(collection(memberDb(), `${householdPath}/incomes`)));
+  assert.ok(members.docs.some((d) => d.data().owner === "wife"));
 });
 
 test("唯讀整合身分：不能新增、修改、刪除收入", async () => {
@@ -137,11 +145,11 @@ test("從名單移除後立即失去讀取權；重新列入後恢復", async ()
   await setReaders([]);
   try {
     await assertFails(getDoc(doc(readerDb(), householdPath)));
-    await assertFails(getDocs(collection(readerDb(), `${householdPath}/incomes`)));
+    await assertFails(getDocs(query(collection(readerDb(), `${householdPath}/incomes`), where("owner", "==", "chris"))));
   } finally {
     await setReaders([users.reader.uid]);
   }
-  await assertSucceeds(getDocs(collection(readerDb(), `${householdPath}/incomes`)));
+  await assertSucceeds(getDocs(query(collection(readerDb(), `${householdPath}/incomes`), where("owner", "==", "chris"))));
 });
 
 test("收入原地修改：兩位成員都能修改，文件 ID、owner、createdBy 不變；清除備註會移除欄位；唯讀身分讀到新版本", async () => {
@@ -160,6 +168,8 @@ test("收入原地修改：兩位成員都能修改，文件 ID、owner、create
   await assertFails(updateDoc(doc(outsiderDb(), `${householdPath}/incomes/${id}`), { amount: 1 }));
   await assertFails(updateDoc(doc(memberDb(), `${householdPath}/incomes/${id}`), { householdId: "other-household" }));
   await assertSucceeds(deleteDoc(doc(memberDb(), `${householdPath}/incomes/${id}`)));
-  const gone = await assertSucceeds(getDoc(doc(readerDb(), `${householdPath}/incomes/${id}`)));
-  assert.equal(gone.exists(), false);
+  // R3：刪除後整合身分的本人查詢不再出現這筆；直接讀已刪除的文件因無法證明屬於本人而被拒絕。
+  const after = await assertSucceeds(getDocs(query(collection(readerDb(), `${householdPath}/incomes`), where("owner", "==", "chris"))));
+  assert.equal(after.docs.some((d) => d.id === id), false);
+  await assertFails(getDoc(doc(readerDb(), `${householdPath}/incomes/${id}`)));
 });

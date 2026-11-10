@@ -83,8 +83,10 @@ service cloud.firestore {
       allow create, update, delete: if false;
 
       // 整合身分只能讀取 incomes（get／list），沒有任何寫入、刪除或其他集合的權限。
+      // R3：而且只限本人（owner == 'chris'，App 依登入 UID 白名單寫入的權威欄位）的收入；
+      // 太太與其他成員的收入對整合身分一律拒絕（查詢必須帶 owner == 'chris' 條件）。
       match /incomes/{incomeId} {
-        allow get, list: if isIntegrationReader(householdId);
+        allow get, list: if isIntegrationReader(householdId) && resource.data.owner == 'chris';
       }
 
       // 還款明細：成員可建立、修改、作廢／還原；只有原支出也在同一批次刪除時才能刪除明細。
