@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
 import { IncomeEditForm } from "@/components/IncomeEditForm";
+import { LoanRepaymentForm } from "@/components/LoanRepaymentForm";
 import { reimbursedAdvancesForPeriod } from "@/lib/advanceCashFlow";
 import { cardActivityRange, cardStatementLabel, isInCardStatement, monthDiff, monthLabel, nextLegacyInstallmentState, shiftMonth, statementRangeForCard } from "@/lib/cardBilling";
 import { currentMonthString, localDateString } from "@/lib/date";
@@ -16,6 +17,7 @@ import {
   getAllCardPaymentRecords,
   getAllExpenseRecords,
   getAllIncomeRecords,
+  getAllLoanRepayments,
   getCardPaymentRecordsByBillMonth,
   getCardPaymentRecordsFromBillMonth,
   getCardPaymentRecordsByMonth,
@@ -27,6 +29,8 @@ import {
   updateExpenseRecord,
   updateIncomeRecord,
   updateLegacyInstallmentRecord,
+  saveLoanRepayment,
+  setLoanRepaymentStatus,
 } from "@/lib/records";
 import type {
   AdvanceRecord,
@@ -40,6 +44,9 @@ import type {
 } from "@/lib/records";
 import type { Viewer } from "@/lib/household";
 import type { IncomeRecordChanges } from "@/lib/incomeEdit";
+import { isLoanExpenseCandidate } from "@/lib/loanRepayment";
+import { LOAN_KEY_LABELS } from "@/types/loanRepayment";
+import type { LoanRepaymentFields, LoanRepaymentRecord } from "@/types/loanRepayment";
 
 type Scope = "month" | "all";
 type CreditCardTab = "due" | "unbilled" | "paid";
@@ -277,6 +284,9 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [statementAmountDrafts, setStatementAmountDrafts] = useState<Record<string, string>>({});
   const [editingInstallmentId, setEditingInstallmentId] = useState<string | null>(null);
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
+  // 房貸／增貸還款明細（依支出 ID）；null 表示目前讀不到（例如 Rules 尚未部署），不影響其他功能。
+  const [loanRepayments, setLoanRepayments] = useState<Record<string, LoanRepaymentRecord> | null>({});
+  const [editingRepaymentId, setEditingRepaymentId] = useState<string | null>(null);
   const [installmentMonthDraft, setInstallmentMonthDraft] = useState("");
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const mutationLockRef = useRef(false);
@@ -324,6 +334,8 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
       setCardPayments(paymentData);
       setDueBillPayments(duePaymentData);
       setLegacyInstallments(syncedLegacyInstallments);
+      const repaymentData = await getAllLoanRepayments().catch((error: unknown) => { console.error(error); return null; });
+      setLoanRepayments(repaymentData ? Object.fromEntries(repaymentData.map((item) => [item.id, item])) : null);
     } catch (error) {
       console.error(error);
       setMessage(`讀取資料失敗，請稍後再試或確認 Firebase 設定。錯誤：${getErrorCode(error)}`);
@@ -365,6 +377,24 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     }
     if (!window.confirm("確定要刪除這筆支出嗎？")) return;
     await runMutation("刪除支出", () => deleteExpenseRecord(record.id, user.uid));
+  }
+
+  async function handleSaveRepayment(record: ExpenseRecord, fields: LoanRepaymentFields) {
+    if (!user) {
+      setMessage("請先登入。");
+      return;
+    }
+    await runMutation("儲存還款明細", async () => {
+      await saveLoanRepayment(record.id, fields, loanRepayments?.[record.id] ?? null, user.uid);
+      setEditingRepaymentId(null);
+    });
+  }
+
+  async function handleRepaymentStatus(record: ExpenseRecord, status: LoanRepaymentFields["status"]) {
+    await runMutation(status === "VOID" ? "作廢還款明細" : "還原還款明細", async () => {
+      await setLoanRepaymentStatus(record.id, status);
+      setEditingRepaymentId(null);
+    });
   }
 
   async function handleUpdateIncome(id: string, changes: IncomeRecordChanges) {
@@ -652,9 +682,10 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
               <button className="row" type="button" onClick={() => setOpenedCategory(isCategoryOpen ? null : categoryKey)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
                 <strong>{category}</strong><span className="muted">{money(categoryTotal)}・{isCategoryOpen ? "收合" : "明細"}</span>
               </button>
-              {isCategoryOpen ? <div className="grid">{categoryRecords.map((record) => <div className="record-row" key={record.id}>
-                <span className="record-title">{record.date.slice(5)}　{record.isPrivate ? "個人雜支" : record.note || record.category}</span>
-                <span className="record-actions"><span className="muted">{money(record.amount)}{record.creditCard ? `・${record.creditCard}` : ""}{record.target === "junyao" ? `・${displayPaidBy(record, viewer)}付` : ""}</span><button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteExpense(record)}>刪除</button></span>
+              {isCategoryOpen ? <div className="grid">{categoryRecords.map((record) => <div key={record.id}><div className="record-row">
+                <span className="record-title">{record.date.slice(5)}　{record.isPrivate ? "個人雜支" : record.note || record.category}{loanRepayments?.[record.id] ? `・${LOAN_KEY_LABELS[loanRepayments[record.id].loanKey]}${loanRepayments[record.id].status === "VOID" ? "明細已作廢" : `本金 ${money(loanRepayments[record.id].principal)}`}` : ""}</span>
+                <span className="record-actions"><span className="muted">{money(record.amount)}{record.creditCard ? `・${record.creditCard}` : ""}{record.target === "junyao" ? `・${displayPaidBy(record, viewer)}付` : ""}</span>{loanRepayments && (loanRepayments[record.id] || isLoanExpenseCandidate(record)) ? <button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => setEditingRepaymentId(editingRepaymentId === record.id ? null : record.id)}>{editingRepaymentId === record.id ? "收合" : "還款明細"}</button> : null}<button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteExpense(record)}>刪除</button></span>
+              </div>{editingRepaymentId === record.id ? <LoanRepaymentForm expense={record} existing={loanRepayments?.[record.id] ?? null} disabled={pendingAction !== null} onSave={(fields) => handleSaveRepayment(record, fields)} onSetStatus={(status) => handleRepaymentStatus(record, status)} onCancel={() => setEditingRepaymentId(null)} /> : null}
               </div>)}</div> : null}
             </div>;
           })}</div> : null}

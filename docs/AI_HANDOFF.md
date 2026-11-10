@@ -300,3 +300,13 @@ node scripts/seed-firebase-emulator.mjs
 - 外部唯讀整合身分：Rules 新增 `isDedicatedReader`／`isIntegrationReader`。家庭文件的 `integrationReaderIds` 名單中的 UID（且不是成員）只能讀家庭文件與 `incomes`（get／list），沒有任何寫入或其他集合權限。名單只能由 Console／Admin 寫入（客戶端不可寫家庭文件，R1 不變）。成員與其他集合的既有規則完全未改。
 - Emulator：seed 新增虛構 `integration.reader@example.test` 與 `integrationReaderIds`；新增 `tests/emulator/integration-reader.test.mjs`（9 項）與 `tests/incomeEdit.test.mjs`（5 項）。
 - 正式上線前需要另行授權：建立正式整合帳號、在 Console 把它的 UID 寫入 `integrationReaderIds`、依 D-013 部署 Rules。
+
+## 2026-11-05 Portfolio Steward 同步第二階段：房貸／增貸還款明細（本機分支，未部署）
+
+- 分支：`feature/household-sync-phase2`（接在第一階段之後）；只在本機與 Emulator 驗證，**未部署 Rules、未 push、未部署網站**。
+- 資料：`households/{householdId}/loanRepayments/{expenseId}`，文件 ID 等於原支出 ID（一筆支出最多一筆明細，不新增支出）。欄位：`householdId`、`expenseId`、`loanKey`（`ORIGINAL_MORTGAGE`／`TOP_UP_LOAN`）、`dueDate`、`paidDate`、`totalAmount`、`principal`、`interest`、`fee`（新台幣整數，本金＋利息＋手續費＝總額＝支出金額）、`confirmation`、`status`（`ACTIVE`／`VOID`）、`createdBy`、`createdAt`、`updatedAt`。型別在 `src/types/loanRepayment.ts`，純驗證在 `src/lib/loanRepayment.ts`（不推算本金或利息）。
+- 畫面：支出列表中備註含「房貸」或「增貸」的支出（或已有明細的支出）出現「還款明細」按鈕，可補登、轉換舊支出、修改、作廢、還原（`LoanRepaymentForm`）。私人支出不顯示。讀不到明細（例如 Rules 尚未部署）時只隱藏按鈕，其他功能不受影響。
+- 刪除支出：`deleteExpenseRecord` 在同一批次一併刪除明細。
+- Rules：成員可建立／修改明細（欄位、整數、相加、日期格式、`updatedAt == request.time`、`createdBy` 不可改；ACTIVE 時總額必須等於支出金額）；明細不能單獨刪除，只能和支出同批刪除；支出不能單獨刪除而留下明細，也不能把金額改成與有效明細不一致。整合身分可讀 `loanRepayments`（get／list），不能寫。其他集合的規則未改。
+- 測試：`tests/loanRepayment.test.mjs`（5 項）、`tests/emulator/loan-repayment-rules.test.mjs`（7 項）。
+- 正式上線前需要另行授權：依 D-013 部署 Rules；Portfolio Steward 端 Migration 0038 的套用與正式同步另案核准。

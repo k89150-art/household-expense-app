@@ -5,6 +5,7 @@ import { HOUSEHOLD_ID } from "@/lib/household";
 import type { IncomeRecordChanges } from "@/lib/incomeEdit";
 import { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
 import type { IncomeOwner, IncomeRecord } from "@/types/income";
+import type { LoanRepaymentFields, LoanRepaymentRecord } from "@/types/loanRepayment";
 export type { IncomeCategory, IncomeRecord } from "@/types/income";
 
 export type CreditCardName = "玉山" | "台新" | "國泰" | "中信" | "保費卡";
@@ -282,8 +283,33 @@ export async function deleteExpenseRecord(id: string, ownerId: string) {
   ));
   const batch = writeBatch(db);
   privateDetails.docs.forEach((detail) => batch.delete(detail.ref));
+  // 房貸／增貸還款明細跟著原支出一起刪除（同一個批次）；Portfolio Steward 下次同步會作廢對應還款，歷史保留。
+  batch.delete(doc(db, "households", HOUSEHOLD_ID, "loanRepayments", id));
   batch.delete(expenseRef);
   await batch.commit();
+}
+
+/** 房貸／增貸還款明細：文件 ID 等於原支出 ID，所以一筆支出最多一筆明細，不會新增重複支出。 */
+export async function getAllLoanRepayments() {
+  const collectionRef = collection(db, "households", HOUSEHOLD_ID, "loanRepayments");
+  const snapshot = await getDocs(query(collectionRef, where("householdId", "==", HOUSEHOLD_ID)));
+  return snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as LoanRepaymentRecord);
+}
+
+/** 建立或修改還款明細（補登、轉換舊支出也走這裡）。createdBy 只在建立時寫入，之後不變。 */
+export async function saveLoanRepayment(expenseId: string, fields: LoanRepaymentFields, existing: LoanRepaymentRecord | null, uid: string) {
+  const docRef = doc(db, "households", HOUSEHOLD_ID, "loanRepayments", expenseId);
+  if (existing) {
+    await updateDoc(docRef, { ...fields, updatedAt: serverTimestamp() });
+    return;
+  }
+  await setDoc(docRef, { ...fields, householdId: HOUSEHOLD_ID, expenseId, createdBy: uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+}
+
+/** 作廢或還原：只改狀態，不刪除文件，保留歷史。 */
+export async function setLoanRepaymentStatus(expenseId: string, status: LoanRepaymentFields["status"]) {
+  const docRef = doc(db, "households", HOUSEHOLD_ID, "loanRepayments", expenseId);
+  await updateDoc(docRef, { status, updatedAt: serverTimestamp() });
 }
 
 export async function addIncomeRecord(input: NewIncomeInput) {

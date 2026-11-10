@@ -33,6 +33,49 @@ service cloud.firestore {
         isDedicatedReader(get(householdDoc(householdId)).data);
     }
 
+    function repaymentDoc(householdId, expenseId) {
+      return /databases/$(database)/documents/households/$(householdId)/loanRepayments/$(expenseId);
+    }
+
+    function expenseDoc(householdId, expenseId) {
+      return /databases/$(database)/documents/households/$(householdId)/expenses/$(expenseId);
+    }
+
+    function wholeTwd(value) {
+      return value is int && value >= 0 && value <= 999999999999999;
+    }
+
+    function calendarDate(value) {
+      return value is string && value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    // 房貸／增貸還款明細：一定連結同 ID 的既有支出（寫入後仍存在），本金＋利息＋手續費＝總額；
+    // 有效（ACTIVE）明細的總額必須等於該支出金額，所以家庭支出只算一次、不會另外新增支出。
+    function validRepayment(householdId, expenseId) {
+      let d = request.resource.data;
+      return d.keys().hasAll(['householdId', 'expenseId', 'loanKey', 'dueDate', 'paidDate', 'totalAmount', 'principal', 'interest', 'fee',
+          'confirmation', 'status', 'createdBy', 'createdAt', 'updatedAt']) &&
+        d.keys().hasOnly(['householdId', 'expenseId', 'loanKey', 'dueDate', 'paidDate', 'totalAmount', 'principal', 'interest', 'fee',
+          'confirmation', 'status', 'createdBy', 'createdAt', 'updatedAt']) &&
+        d.householdId == householdId && d.expenseId == expenseId &&
+        d.loanKey in ['ORIGINAL_MORTGAGE', 'TOP_UP_LOAN'] && d.status in ['ACTIVE', 'VOID'] &&
+        d.confirmation in ['BANK_CONFIRMED', 'OWNER_CONFIRMED'] &&
+        calendarDate(d.dueDate) && calendarDate(d.paidDate) &&
+        wholeTwd(d.totalAmount) && wholeTwd(d.principal) && wholeTwd(d.interest) && wholeTwd(d.fee) &&
+        d.principal + d.interest > 0 && d.principal + d.interest + d.fee == d.totalAmount &&
+        d.createdBy is string && d.updatedAt == request.time &&
+        existsAfter(expenseDoc(householdId, expenseId)) &&
+        (d.status == 'VOID' || getAfter(expenseDoc(householdId, expenseId)).data.amount == d.totalAmount);
+    }
+
+    // 支出修改／刪除不得讓還款明細失去對應：刪除支出時明細必須在同一批次一併刪除；
+    // 修改支出金額時，有效明細的總額必須同時等於新金額。
+    function expenseKeepsRepayment(householdId, expenseId) {
+      return !existsAfter(repaymentDoc(householdId, expenseId)) ||
+        getAfter(repaymentDoc(householdId, expenseId)).data.status == 'VOID' ||
+        getAfter(repaymentDoc(householdId, expenseId)).data.totalAmount == request.resource.data.amount;
+    }
+
     match /households/{householdId} {
       allow read: if signedIn() && request.auth.uid in resource.data.memberIds;
       // 整合身分只能讀家庭文件（用來確認自己是唯讀整合身分、不是成員），不能寫。
@@ -44,8 +87,19 @@ service cloud.firestore {
         allow get, list: if isIntegrationReader(householdId);
       }
 
+      // 還款明細：成員可建立、修改、作廢／還原；只有原支出也在同一批次刪除時才能刪除明細。
+      // 整合身分（Portfolio Steward）只能讀取（get／list），不能寫入。
+      match /loanRepayments/{expenseId} {
+        allow get, list: if isHouseholdMember(householdId) || isIntegrationReader(householdId);
+        allow create: if isHouseholdMember(householdId) && validRepayment(householdId, expenseId) &&
+          request.resource.data.createdBy == request.auth.uid && request.resource.data.createdAt == request.time;
+        allow update: if isHouseholdMember(householdId) && validRepayment(householdId, expenseId) &&
+          request.resource.data.createdBy == resource.data.createdBy && request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if isHouseholdMember(householdId) && !existsAfter(expenseDoc(householdId, expenseId));
+      }
+
       match /{collectionName}/{docId} {
-        allow read, delete: if collectionName in [
+        allow read: if collectionName in [
           'expenses',
           'incomes',
           'investments',
@@ -58,6 +112,21 @@ service cloud.firestore {
           'prepaidAccounts',
           'prepaidSettlements'
         ] && isHouseholdMember(householdId);
+
+        allow delete: if collectionName in [
+          'expenses',
+          'incomes',
+          'investments',
+          'advances',
+          'cardPayments',
+          'livingTransfers',
+          'recurringExpenses',
+          'creditCards',
+          'creditCardBills',
+          'prepaidAccounts',
+          'prepaidSettlements'
+        ] && isHouseholdMember(householdId) &&
+          (collectionName != 'expenses' || !existsAfter(repaymentDoc(householdId, docId)));
 
         allow create: if collectionName in [
           'expenses',
@@ -85,7 +154,8 @@ service cloud.firestore {
           'creditCardBills',
           'prepaidAccounts',
           'prepaidSettlements'
-        ] && isHouseholdMember(householdId) && belongsToHousehold(householdId);
+        ] && isHouseholdMember(householdId) && belongsToHousehold(householdId) &&
+          (collectionName != 'expenses' || expenseKeepsRepayment(householdId, docId));
       }
 
       match /privateExpenseDetails/{detailId} {
