@@ -6,6 +6,7 @@ import { currentMonthString, previousMonthDayForMonth } from "@/lib/date";
 import { addExpenseRecord, deleteRecurringExpenseTemplate, getExpenseRecordsByMonth, getRecurringExpenseTemplates, upsertRecurringExpenseTemplate } from "@/lib/records";
 import type { CreditCardName, OwnerKey, RecurringExpenseTemplateRecord } from "@/lib/records";
 import type { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
+import type { LoanKey } from "@/types/loanRepayment";
 
 type Viewer = "chris" | "wife";
 type Owner = "self" | "spouse" | "junyao" | "cat";
@@ -78,6 +79,9 @@ const DEFAULT_ITEMS: RecurringItem[] = [
 ];
 
 const STORAGE_KEY = "household-expense-recurring-items";
+
+/** 固定支出範本 ID -> 貸款別。這兩個範本新增的支出帶 loanKey，還款明細不必依備註文字判斷。 */
+const LOAN_TEMPLATE_KEYS: Record<string, LoanKey> = { mortgage: "ORIGINAL_MORTGAGE", "home-equity-loan": "TOP_UP_LOAN" };
 
 /** 已移除的預設項目（例如信貸）：雲端或本機殘留的舊模板一律略過，不顯示也不再寫回。 */
 const REMOVED_TEMPLATE_IDS = new Set(["personal-loan"]);
@@ -353,6 +357,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
         note: selectedItem.name,
         isPrivate: false,
         createdBy: user.uid,
+        loanKey: LOAN_TEMPLATE_KEYS[selectedItem.id],
       });
       setMessage(`已新增：${selectedItem.name}｜${recordDate}｜${category}｜${selectedItem.paymentMethod}${selectedItem.creditCard ? `・${selectedItem.creditCard}` : ""}｜$${selectedItem.amount.toLocaleString("zh-TW")}`);
     } catch (error) {

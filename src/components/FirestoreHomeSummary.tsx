@@ -687,7 +687,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
               {isCategoryOpen ? <div className="grid">{categoryRecords.map((record) => {
                 const repayment = loanRepayments?.[record.id];
                 const meta = [
-                  repayment ? `${LOAN_KEY_LABELS[repayment.loanKey]}${repayment.status === "VOID" ? "明細已作廢" : `本金 ${money(repayment.principal)}`}` : "",
+                  repayment ? `${LOAN_KEY_LABELS[repayment.loanKey]}${repayment.status === "VOID" ? "明細已作廢" : repayment.stage === "PENDING_DEBIT" ? `待銀行扣款・預定 ${repayment.dueDate.slice(5)}` : `銀行已扣款・本金 ${money(repayment.principal)}`}` : "",
                   record.creditCard ?? "",
                   record.target === "junyao" ? `${displayPaidBy(record, viewer)}付` : "",
                 ].filter(Boolean).join("・");

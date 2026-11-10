@@ -49,30 +49,51 @@ service cloud.firestore {
       return value is string && value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
     }
 
-    // 房貸／增貸還款明細：一定連結同 ID 的既有支出（寫入後仍存在），本金＋利息＋手續費＝總額；
-    // 有效（ACTIVE）明細的總額必須等於該支出金額，所以家庭支出只算一次、不會另外新增支出。
+    // 房貸／增貸還款明細：一定連結同 ID 的既有支出（寫入後仍存在）。R4 兩段式：
+    //  - PENDING_DEBIT（待銀行扣款）：只有貸款別、預定扣款日與金額；有效時金額必須等於該支出，不可有本金／利息／實際扣款日。
+    //  - BANK_DEBITED（銀行已扣款）：本金＋利息＋手續費＝總額（銀行實際扣款，可與轉帳支出金額不同；支出本身不改）。
+    //  - 沒有 stage 的舊文件：維持 R3 規則（總額必須等於支出金額），舊版 App 照常可用。
+    function repaymentBase(householdId, expenseId) {
+      let d = request.resource.data;
+      return d.householdId == householdId && d.expenseId == expenseId &&
+        d.loanKey in ['ORIGINAL_MORTGAGE', 'TOP_UP_LOAN'] && d.status in ['ACTIVE', 'VOID'] &&
+        calendarDate(d.dueDate) && wholeTwd(d.totalAmount) && d.totalAmount > 0 &&
+        d.createdBy is string && d.updatedAt == request.time &&
+        existsAfter(expenseDoc(householdId, expenseId));
+    }
+
+    function debitedSplit() {
+      let d = request.resource.data;
+      return d.confirmation in ['BANK_CONFIRMED', 'OWNER_CONFIRMED'] && calendarDate(d.paidDate) &&
+        wholeTwd(d.principal) && wholeTwd(d.interest) && wholeTwd(d.fee) &&
+        d.principal + d.interest > 0 && d.principal + d.interest + d.fee == d.totalAmount;
+    }
+
     function validRepayment(householdId, expenseId) {
       let d = request.resource.data;
-      return d.keys().hasAll(['householdId', 'expenseId', 'loanKey', 'dueDate', 'paidDate', 'totalAmount', 'principal', 'interest', 'fee',
-          'confirmation', 'status', 'createdBy', 'createdAt', 'updatedAt']) &&
-        d.keys().hasOnly(['householdId', 'expenseId', 'loanKey', 'dueDate', 'paidDate', 'totalAmount', 'principal', 'interest', 'fee',
-          'confirmation', 'status', 'createdBy', 'createdAt', 'updatedAt']) &&
-        d.householdId == householdId && d.expenseId == expenseId &&
-        d.loanKey in ['ORIGINAL_MORTGAGE', 'TOP_UP_LOAN'] && d.status in ['ACTIVE', 'VOID'] &&
-        d.confirmation in ['BANK_CONFIRMED', 'OWNER_CONFIRMED'] &&
-        calendarDate(d.dueDate) && calendarDate(d.paidDate) &&
-        wholeTwd(d.totalAmount) && wholeTwd(d.principal) && wholeTwd(d.interest) && wholeTwd(d.fee) &&
-        d.principal + d.interest > 0 && d.principal + d.interest + d.fee == d.totalAmount &&
-        d.createdBy is string && d.updatedAt == request.time &&
-        existsAfter(expenseDoc(householdId, expenseId)) &&
-        (d.status == 'VOID' || getAfter(expenseDoc(householdId, expenseId)).data.amount == d.totalAmount);
+      let expenseAmount = getAfter(expenseDoc(householdId, expenseId)).data.amount;
+      return repaymentBase(householdId, expenseId) && (
+        (d.keys().hasAll(['householdId', 'expenseId', 'stage', 'loanKey', 'dueDate', 'totalAmount', 'status', 'createdBy', 'createdAt', 'updatedAt']) &&
+          d.keys().hasOnly(['householdId', 'expenseId', 'stage', 'loanKey', 'dueDate', 'totalAmount', 'status', 'createdBy', 'createdAt', 'updatedAt']) &&
+          d.stage == 'PENDING_DEBIT' && (d.status == 'VOID' || expenseAmount == d.totalAmount)) ||
+        (d.keys().hasAll(['householdId', 'expenseId', 'stage', 'loanKey', 'dueDate', 'paidDate', 'totalAmount', 'principal', 'interest', 'fee',
+            'confirmation', 'status', 'createdBy', 'createdAt', 'updatedAt']) &&
+          d.keys().hasOnly(['householdId', 'expenseId', 'stage', 'loanKey', 'dueDate', 'paidDate', 'totalAmount', 'principal', 'interest', 'fee',
+            'confirmation', 'status', 'createdBy', 'createdAt', 'updatedAt']) &&
+          d.stage == 'BANK_DEBITED' && debitedSplit()) ||
+        (d.keys().hasAll(['householdId', 'expenseId', 'loanKey', 'dueDate', 'paidDate', 'totalAmount', 'principal', 'interest', 'fee',
+            'confirmation', 'status', 'createdBy', 'createdAt', 'updatedAt']) &&
+          d.keys().hasOnly(['householdId', 'expenseId', 'loanKey', 'dueDate', 'paidDate', 'totalAmount', 'principal', 'interest', 'fee',
+            'confirmation', 'status', 'createdBy', 'createdAt', 'updatedAt']) &&
+          debitedSplit() && (d.status == 'VOID' || expenseAmount == d.totalAmount)));
     }
 
     // 支出修改／刪除不得讓還款明細失去對應：刪除支出時明細必須在同一批次一併刪除；
-    // 修改支出金額時，有效明細的總額必須同時等於新金額。
+    // 修改支出金額時，有效的待扣款（及舊文件）明細總額必須同時等於新金額；銀行已扣款的明細記的是銀行實際扣款，不受影響。
     function expenseKeepsRepayment(householdId, expenseId) {
       return !existsAfter(repaymentDoc(householdId, expenseId)) ||
         getAfter(repaymentDoc(householdId, expenseId)).data.status == 'VOID' ||
+        getAfter(repaymentDoc(householdId, expenseId)).data.get('stage', '') == 'BANK_DEBITED' ||
         getAfter(repaymentDoc(householdId, expenseId)).data.totalAmount == request.resource.data.amount;
     }
 

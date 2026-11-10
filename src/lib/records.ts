@@ -5,7 +5,7 @@ import { HOUSEHOLD_ID } from "@/lib/household";
 import type { IncomeRecordChanges } from "@/lib/incomeEdit";
 import { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
 import type { IncomeOwner, IncomeRecord } from "@/types/income";
-import type { LoanRepaymentFields, LoanRepaymentRecord } from "@/types/loanRepayment";
+import type { LoanKey, LoanRepaymentFields, LoanRepaymentRecord } from "@/types/loanRepayment";
 export type { IncomeCategory, IncomeRecord } from "@/types/income";
 
 export type CreditCardName = "玉山" | "台新" | "國泰" | "中信" | "保費卡";
@@ -40,6 +40,8 @@ export type ExpenseRecord = {
   note?: string;
   isPrivate: boolean;
   privateNote?: string;
+  /** 房貸／增貸的穩定識別：由固定支出範本「房貸」「房屋增貸」新增時寫入（不靠備註文字判斷）。 */
+  loanKey?: LoanKey;
   createdBy: string;
   createdAt?: unknown;
   updatedAt?: unknown;
@@ -296,11 +298,14 @@ export async function getAllLoanRepayments() {
   return snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as LoanRepaymentRecord);
 }
 
-/** 建立或修改還款明細（補登、轉換舊支出也走這裡）。createdBy 只在建立時寫入，之後不變。 */
+/**
+ * 建立或修改還款明細（補登、轉換舊支出也走這裡）。createdBy／createdAt 只在建立時寫入，之後不變。
+ * 修改時整份覆寫（待扣款 <-> 已扣款的欄位不同，不能殘留另一階段的欄位），保留原本的 createdBy 與 createdAt。
+ */
 export async function saveLoanRepayment(expenseId: string, fields: LoanRepaymentFields, existing: LoanRepaymentRecord | null, uid: string) {
   const docRef = doc(db, "households", HOUSEHOLD_ID, "loanRepayments", expenseId);
   if (existing) {
-    await updateDoc(docRef, { ...fields, updatedAt: serverTimestamp() });
+    await setDoc(docRef, { ...fields, householdId: HOUSEHOLD_ID, expenseId, createdBy: existing.createdBy, createdAt: existing.createdAt, updatedAt: serverTimestamp() });
     return;
   }
   await setDoc(docRef, { ...fields, householdId: HOUSEHOLD_ID, expenseId, createdBy: uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
