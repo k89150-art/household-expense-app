@@ -28,6 +28,8 @@ const TEST_USERS = {
   member: "member.one@example.test",
   partner: "member.two@example.test",
   outsider: "outsider@example.test",
+  // 外部整合專用唯讀身分（虛構）；不是家庭成員，只列在 integrationReaderIds。
+  reader: "integration.reader@example.test",
 };
 
 async function deleteEmulatorData() {
@@ -47,7 +49,7 @@ async function deleteEmulatorData() {
 // Household documents are not client-writable under the R1 Rules. The seed writes
 // them through the Emulator-only privileged channel ("Bearer owner"), which works
 // only against the local Emulator and never against production Firebase.
-async function seedHouseholdDocument(memberIds) {
+async function seedHouseholdDocument(memberIds, integrationReaderIds = []) {
   assertSafeEmulatorTarget();
   const now = new Date().toISOString();
   const endpoint = emulatorUrl(
@@ -64,6 +66,7 @@ async function seedHouseholdDocument(memberIds) {
       fields: {
         name: { stringValue: "Emulator Test Household" },
         memberIds: { arrayValue: { values: memberIds.map((uid) => ({ stringValue: uid })) } },
+        integrationReaderIds: { arrayValue: { values: integrationReaderIds.map((uid) => ({ stringValue: uid })) } },
         createdAt: { timestampValue: now },
         updatedAt: { timestampValue: now },
       },
@@ -96,6 +99,7 @@ export async function seedFirebaseEmulators() {
     const member = await createTestUser(auth, TEST_USERS.member);
     const partner = await createTestUser(auth, TEST_USERS.partner);
     const outsider = await createTestUser(auth, TEST_USERS.outsider);
+    const reader = await createTestUser(auth, TEST_USERS.reader);
     await signInWithEmailAndPassword(auth, TEST_USERS.member, TEST_PASSWORD);
 
     const db = getFirestore(app);
@@ -103,7 +107,7 @@ export async function seedFirebaseEmulators() {
     const householdPath = `households/${TEST_HOUSEHOLD_ID}`;
     const common = { householdId: TEST_HOUSEHOLD_ID, createdBy: member.uid };
 
-    await seedHouseholdDocument([member.uid, partner.uid]);
+    await seedHouseholdDocument([member.uid, partner.uid], [reader.uid]);
     await setDoc(doc(db, `${householdPath}/incomes/seed-income`), {
       ...common,
       date: "2026-10-01",
@@ -139,7 +143,7 @@ export async function seedFirebaseEmulators() {
       updatedAt: serverTimestamp(),
     });
 
-    return { member, partner, outsider };
+    return { member, partner, outsider, reader };
   } finally {
     await deleteApp(app);
   }
@@ -148,7 +152,7 @@ export async function seedFirebaseEmulators() {
 const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isDirectRun) {
   seedFirebaseEmulators()
-    .then(({ member, partner, outsider }) => {
+    .then(({ member, partner, outsider, reader }) => {
       console.log(JSON.stringify({
         projectId: EMULATOR_PROJECT_ID,
         auth: `${EMULATOR_HOST}:${AUTH_EMULATOR_PORT}`,
@@ -158,6 +162,7 @@ if (isDirectRun) {
           member: member.uid,
           partner: partner.uid,
           outsider: outsider.uid,
+          reader: reader.uid,
         },
       }, null, 2));
     })

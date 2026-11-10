@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
+import { IncomeEditForm } from "@/components/IncomeEditForm";
 import { reimbursedAdvancesForPeriod } from "@/lib/advanceCashFlow";
 import { cardActivityRange, cardStatementLabel, isInCardStatement, monthDiff, monthLabel, nextLegacyInstallmentState, shiftMonth, statementRangeForCard } from "@/lib/cardBilling";
 import { currentMonthString, localDateString } from "@/lib/date";
@@ -24,6 +25,7 @@ import {
   getLegacyInstallmentRecords,
   updateAdvanceRecord,
   updateExpenseRecord,
+  updateIncomeRecord,
   updateLegacyInstallmentRecord,
 } from "@/lib/records";
 import type {
@@ -37,6 +39,7 @@ import type {
   LegacyInstallmentRecord,
 } from "@/lib/records";
 import type { Viewer } from "@/lib/household";
+import type { IncomeRecordChanges } from "@/lib/incomeEdit";
 
 type Scope = "month" | "all";
 type CreditCardTab = "due" | "unbilled" | "paid";
@@ -273,6 +276,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
   const [openedCardDetails, setOpenedCardDetails] = useState<Record<string, boolean>>({});
   const [statementAmountDrafts, setStatementAmountDrafts] = useState<Record<string, string>>({});
   const [editingInstallmentId, setEditingInstallmentId] = useState<string | null>(null);
+  const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
   const [installmentMonthDraft, setInstallmentMonthDraft] = useState("");
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const mutationLockRef = useRef(false);
@@ -361,6 +365,13 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
     }
     if (!window.confirm("確定要刪除這筆支出嗎？")) return;
     await runMutation("刪除支出", () => deleteExpenseRecord(record.id, user.uid));
+  }
+
+  async function handleUpdateIncome(id: string, changes: IncomeRecordChanges) {
+    await runMutation("修改收入", async () => {
+      await updateIncomeRecord(id, changes);
+      setEditingIncomeId(null);
+    });
   }
 
   async function handleDeleteIncome(id: string) {
@@ -610,9 +621,12 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           {incomes.length === 0 ? <p className="muted">這個月份沒有收入資料</p> : null}
           {Object.entries(groupedIncomes).map(([owner, ownerRecords]) => <div className="card grid" style={{ boxShadow: "none" }} key={owner}>
             <div className="row"><strong>{ownerLabel(owner as "chris" | "wife", viewer)}</strong><strong>{money(ownerRecords.reduce((sum, record) => sum + record.amount, 0))}</strong></div>
-            {ownerRecords.map((record) => <div className="record-row" key={record.id}>
-              <span className="record-title">{record.date.slice(5)}　{record.category}{record.note ? `・${record.note}` : ""}</span>
-              <span className="record-actions"><span className="muted">{money(record.amount)}</span><button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteIncome(record.id)}>刪除</button></span>
+            {ownerRecords.map((record) => <div className="grid" key={record.id}>
+              <div className="record-row">
+                <span className="record-title">{record.date.slice(5)}　{record.category}{record.note ? `・${record.note}` : ""}</span>
+                <span className="record-actions"><span className="muted">{money(record.amount)}</span><button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => setEditingIncomeId(editingIncomeId === record.id ? null : record.id)}>{editingIncomeId === record.id ? "收合" : "修改"}</button><button className="btn secondary delete-btn" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteIncome(record.id)}>刪除</button></span>
+              </div>
+              {editingIncomeId === record.id ? <IncomeEditForm record={record} disabled={pendingAction !== null} onSave={(changes) => handleUpdateIncome(record.id, changes)} onCancel={() => setEditingIncomeId(null)} /> : null}
             </div>)}
           </div>)}
         </div> : null}

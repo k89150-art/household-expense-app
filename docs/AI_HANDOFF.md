@@ -292,3 +292,11 @@ node scripts/seed-firebase-emulator.mjs
 
 - 未來部署 Rules 仍須遵守 D-013：部署前重新從 Console 備份並比對、差異只能是當次授權的修改、只用 `--only firestore:rules`。
 - main 與開發分支的交接文件都是在共同祖先 `96f8e03` 的檔案結尾各自追加，日後合併必定在文件結尾衝突；本分支已原樣併入 main 的 2026-10-30 同步紀錄與 D-014，解衝突時以本分支版本為準，不會遺失 main 的紀錄。
+
+## 2026-11-05 Portfolio Steward 同步第一階段（本機分支，未部署）
+
+- 分支：`feature/household-sync-phase1`（從 main `7c7e36a` 建立）；只在本機與 Emulator 驗證，**未部署 Rules、未 push、未部署網站**。
+- 收入原地修改：`src/lib/incomeEdit.ts`（純函式驗證，只寫有變更的欄位）、`updateIncomeRecord`（`updateDoc`，保留文件 ID、owner、householdId、createdBy；清除備註用 `deleteField`）、收入列表「修改」按鈕與 `IncomeEditForm`。
+- 外部唯讀整合身分：Rules 新增 `isDedicatedReader`／`isIntegrationReader`。家庭文件的 `integrationReaderIds` 名單中的 UID（且不是成員）只能讀家庭文件與 `incomes`（get／list），沒有任何寫入或其他集合權限。名單只能由 Console／Admin 寫入（客戶端不可寫家庭文件，R1 不變）。成員與其他集合的既有規則完全未改。
+- Emulator：seed 新增虛構 `integration.reader@example.test` 與 `integrationReaderIds`；新增 `tests/emulator/integration-reader.test.mjs`（9 項）與 `tests/incomeEdit.test.mjs`（5 項）。
+- 正式上線前需要另行授權：建立正式整合帳號、在 Console 把它的 UID 寫入 `integrationReaderIds`、依 D-013 部署 Rules。

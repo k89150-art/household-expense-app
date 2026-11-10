@@ -19,9 +19,30 @@ service cloud.firestore {
       return request.resource.data.householdId == householdId;
     }
 
+    // 外部整合專用唯讀身分（Portfolio Steward 伺服器）。名單只能由 Firebase Console／Admin 寫入家庭文件
+    // （客戶端不可寫家庭文件，見 R1）。同一個 UID 若也是家庭成員，一律不視為整合身分。
+    function isDedicatedReader(data) {
+      return signedIn() &&
+        request.auth.uid in data.get('integrationReaderIds', []) &&
+        !(request.auth.uid in data.memberIds);
+    }
+
+    function isIntegrationReader(householdId) {
+      return signedIn() &&
+        exists(householdDoc(householdId)) &&
+        isDedicatedReader(get(householdDoc(householdId)).data);
+    }
+
     match /households/{householdId} {
       allow read: if signedIn() && request.auth.uid in resource.data.memberIds;
+      // 整合身分只能讀家庭文件（用來確認自己是唯讀整合身分、不是成員），不能寫。
+      allow get: if isDedicatedReader(resource.data);
       allow create, update, delete: if false;
+
+      // 整合身分只能讀取 incomes（get／list），沒有任何寫入、刪除或其他集合的權限。
+      match /incomes/{incomeId} {
+        allow get, list: if isIntegrationReader(householdId);
+      }
 
       match /{collectionName}/{docId} {
         allow read, delete: if collectionName in [

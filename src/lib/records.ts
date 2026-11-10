@@ -1,7 +1,8 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, deleteField, doc, getDoc, getDocs, orderBy, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import { cardPaymentDocumentId } from "@/lib/cardBilling";
 import { db } from "@/lib/firebase";
 import { HOUSEHOLD_ID } from "@/lib/household";
+import type { IncomeRecordChanges } from "@/lib/incomeEdit";
 import { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
 import type { IncomeOwner, IncomeRecord } from "@/types/income";
 export type { IncomeCategory, IncomeRecord } from "@/types/income";
@@ -299,6 +300,21 @@ export async function getIncomeRecordsByDateRange(startDate: string, endDate: st
 
 export async function getAllIncomeRecords() {
   return getAllRecords<IncomeRecord>("incomes");
+}
+
+/**
+ * 原地修改收入：保留同一個 Firestore 文件 ID、owner、householdId 與 createdBy，
+ * 只寫入有變更的欄位與 updatedAt。外部同步（Portfolio Steward）因此看到同一筆紀錄的新版本，
+ * 而不是「刪除＋新增」。
+ */
+export async function updateIncomeRecord(id: string, changes: IncomeRecordChanges) {
+  const docRef = doc(db, "households", HOUSEHOLD_ID, "incomes", id);
+  const { note, ...fields } = changes;
+  await updateDoc(docRef, {
+    ...removeUndefinedFields(fields),
+    ...(note === undefined ? {} : { note: note === null ? deleteField() : note }),
+    updatedAt: serverTimestamp(),
+  });
 }
 
 export async function deleteIncomeRecord(id: string) {
