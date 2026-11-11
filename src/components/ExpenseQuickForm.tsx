@@ -31,6 +31,8 @@ function getCreditCards(viewer: Props["viewer"]): CreditCardName[] {
 /** 常用分類（4 欄 × 2 列，最後一格是「更多」）；其餘分類按「更多」展開。 */
 const MAIN_CATEGORIES: ExpenseCategory[] = ["餐飲", "交通", "生活用品", "醫療", "居家固定費", "娛樂", "衣物"];
 const MAX_DIGITS = 9;
+/** 管理費統一在「固定支出」記錄（每季一次），這裡的居家細項不再列出，避免重複記帳。 */
+const HOME_FEE_OPTIONS = HOME_FEE_ITEMS.filter((item) => item !== "管理費");
 
 /** 金額算式：只允許數字與「+」，例如 120+85+60。 */
 function sumExpression(expression: string) {
@@ -230,7 +232,7 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
         <label className="field">
           <span>居家細項</span>
           <select className="select" value={homeFeeItem} onChange={(event) => setHomeFeeItem(event.target.value as (typeof HOME_FEE_ITEMS)[number])}>
-            {HOME_FEE_ITEMS.map((item) => <option key={item}>{item}</option>)}
+            {HOME_FEE_OPTIONS.map((item) => <option key={item}>{item}</option>)}
           </select>
         </label>
       ) : null}

@@ -50,13 +50,40 @@ function toExpenseCategory(item: RecurringItem): ExpenseCategory {
   if (item.name.includes("手機") || item.category.includes("電話")) return "手機門號費";
   if (item.name.includes("網路") || item.category.includes("網路")) return "網路費";
   if (item.name.includes("保險") || item.category.includes("保險")) return "保險";
-  if (item.name.includes("學費") || item.name.includes("延托") || item.category.includes("學費")) return "學費";
+  if (item.name.includes("學費") || item.name.includes("延托") || item.name.includes("才藝") || item.category.includes("學費")) return "學費";
   if (item.name.includes("管理費") || item.category.includes("管理費") || item.name.includes("房貸")) return "居家固定費";
   return "其他";
 }
 
 function isSubscriptionItem(item: RecurringItem) {
   return item.category === "訂閱" || item.name.startsWith("訂閱：");
+}
+
+/** 才藝班：使用者自訂名稱的範本（例如「才藝班：鋼琴」），兩人都看得到，可刪除。 */
+function isTalentItem(item: RecurringItem) {
+  return item.category === "才藝班" || item.name.startsWith("才藝班：");
+}
+
+/**
+ * 繳費週期（只影響畫面上的「已記錄」判斷與標示，不改資料）：
+ * 手機門號每 2 個月繳一次；管理費每季一次、月份不固定。期間內記過一筆就算已繳。
+ */
+const CYCLE_MONTHS: Record<string, number> = { "mobile-chris": 2, "mobile-wife": 2, "management-fee": 3 };
+
+function cycleMonths(item: RecurringItem) {
+  return CYCLE_MONTHS[item.id] ?? 1;
+}
+
+function cycleLabel(item: RecurringItem) {
+  const months = cycleMonths(item);
+  if (months === 3) return "每季";
+  return months > 1 ? `每 ${months} 個月` : "";
+}
+
+function shiftMonthValue(yyyymm: string, diff: number) {
+  const [year, month] = yyyymm.split("-").map(Number);
+  const date = new Date(year, month - 1 + diff, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function usesPreviousMonthInsuranceDate(item: RecurringItem) {
@@ -106,7 +133,12 @@ function templateGroup(item: RecurringItem) {
 
 function templateRank(item: RecurringItem) {
   if (isSubscriptionItem(item)) return 2;
-  return DEFAULT_ORDER.has(item.id) ? 0 : 1;
+  return DEFAULT_ORDER.has(item.id) || isTalentItem(item) ? 0 : 1;
+}
+
+function templateOrder(item: RecurringItem) {
+  if (isTalentItem(item)) return (DEFAULT_ORDER.get("after-school-care") ?? 0) + 0.5;
+  return DEFAULT_ORDER.get(item.id) ?? 0;
 }
 
 function normalizeRecurringItem(item: RecurringItem): RecurringItem {
@@ -170,19 +202,17 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
     .filter(({ item }) => item.visibleFor.includes(viewer))
     .sort((a, b) =>
       templateRank(a.item) - templateRank(b.item) ||
-      (DEFAULT_ORDER.get(a.item.id) ?? 0) - (DEFAULT_ORDER.get(b.item.id) ?? 0) ||
+      templateOrder(a.item) - templateOrder(b.item) ||
       a.index - b.index
     )
     .map(({ item }) => item), [items, viewer]);
   const groupedVisibleItems = useMemo(() => {
-    const groups: [string, RecurringItem[]][] = [];
+    const groups = new Map<string, RecurringItem[]>();
     for (const item of visibleItems) {
       const group = templateGroup(item);
-      const last = groups.at(-1);
-      if (last && last[0] === group) last[1].push(item);
-      else groups.push([group, [item]]);
+      groups.set(group, [...(groups.get(group) ?? []), item]);
     }
-    return groups;
+    return [...groups.entries()];
   }, [visibleItems]);
   const creditCards = useMemo(() => getNormalCreditCards(viewer), [viewer]);
   const [selectedId, setSelectedId] = useState("");
@@ -197,7 +227,11 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
   const [isTemplateLoading, setIsTemplateLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [recordedIds, setRecordedIds] = useState<Set<string>>(() => new Set());
+  const [recordedIds, setRecordedIds] = useState<Map<string, string>>(() => new Map());
+  const [showTalentForm, setShowTalentForm] = useState(false);
+  const [talentName, setTalentName] = useState("");
+  const [talentAmount, setTalentAmount] = useState("");
+  const [talentPayment, setTalentPayment] = useState<"轉帳" | "現金" | "信用卡">("轉帳");
   const [recordedTick, setRecordedTick] = useState(0);
 
   useEffect(() => {
@@ -256,22 +290,28 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
 
     async function loadRecorded() {
       try {
-        const months = Array.from(new Set([month, insuranceDate.slice(0, 7)]));
+        const maxCycle = Math.max(1, ...visibleItems.map(cycleMonths));
+        const cycleMonthList = Array.from({ length: maxCycle }, (_, index) => shiftMonthValue(month, -index));
+        const months = Array.from(new Set([...cycleMonthList, insuranceDate.slice(0, 7)]));
         const records = (await Promise.all(months.map((value) => getExpenseRecordsByMonth(value)))).flat();
-        const ids = new Set<string>();
+        const ids = new Map<string, string>();
         for (const item of visibleItems) {
           const paymentMethod = toPaymentMethod(item);
           const category = toExpenseCategory(item);
           const target = toTarget(item.target, viewer);
-          const inPeriod = (date: string) => usesPreviousMonthInsuranceDate(item) ? date === insuranceDate : date.startsWith(month);
-          if (records.some((record) =>
-            inPeriod(record.date) &&
-            record.note === item.name &&
-            record.category === category &&
-            record.target === target &&
-            record.paidBy === viewer &&
-            record.paymentMethod === paymentMethod
-          )) ids.add(item.id);
+          const periodStart = `${shiftMonthValue(month, -(cycleMonths(item) - 1))}-01`;
+          const inPeriod = (date: string) => usesPreviousMonthInsuranceDate(item) ? date === insuranceDate : date >= periodStart && date <= `${month}-31`;
+          const shared = item.visibleFor.length > 1;
+          const match = records
+            .filter((record) =>
+              inPeriod(record.date) &&
+              record.note === item.name &&
+              record.category === category &&
+              record.target === target &&
+              (shared || record.paidBy === viewer) &&
+              record.paymentMethod === paymentMethod)
+            .sort((a, b) => b.date.localeCompare(a.date))[0];
+          if (match) ids.set(item.id, match.date);
         }
         if (isMounted) setRecordedIds(ids);
       } catch (error) {
@@ -339,8 +379,8 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
   }
 
   async function deleteSelectedSubscription() {
-    if (!selectedItem || !isSubscriptionItem(selectedItem)) return;
-    const ok = window.confirm(`確定要刪除「${selectedItem.name}」這個訂閱模板嗎？`);
+    if (!selectedItem || !(isSubscriptionItem(selectedItem) || isTalentItem(selectedItem))) return;
+    const ok = window.confirm(`確定要刪除「${selectedItem.name}」這個模板嗎？`);
     if (!ok) return;
 
     try {
@@ -410,6 +450,42 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
     }
   }
 
+  async function addTalentClass(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const amount = Number(talentAmount);
+    if (!talentName.trim() || !Number.isFinite(amount) || amount < 0 || talentAmount.trim() === "") {
+      setMessage("請輸入才藝班名稱與正確金額。");
+      return;
+    }
+    if (!user) {
+      setMessage("請先登入。");
+      return;
+    }
+    const item: RecurringItem = {
+      id: `talent-${Date.now()}`,
+      name: `才藝班：${talentName.trim()}`,
+      category: "才藝班",
+      amount,
+      target: "junyao",
+      paymentMethod: talentPayment,
+      creditCard: talentPayment === "信用卡" ? creditCards[0] : undefined,
+      visibleFor: ["chris", "wife"],
+    };
+    try {
+      await saveTemplateToCloud(item, user.uid);
+      setItems((current) => [...current, item]);
+      setSelectedId(item.id);
+      setTalentName("");
+      setTalentAmount("");
+      setTalentPayment("轉帳");
+      setShowTalentForm(false);
+      setMessage(`已新增才藝班：${item.name}`);
+    } catch (error) {
+      console.error(error);
+      setMessage("新增才藝班失敗，請稍後再試。");
+    }
+  }
+
   async function addSubscription(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const amount = Number(subscriptionAmount);
@@ -469,10 +545,10 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
                 <button className="fixed-row" type="button" aria-expanded={isOpen} onClick={() => { setSelectedId(item.id); setExpandedId(isOpen ? null : item.id); }}>
                   <span className="fixed-row-main">
                     <span className={isRecorded ? "fixed-name done" : "fixed-name"}>{item.name}</span>
-                    <span className="muted">${item.amount.toLocaleString("zh-TW")} · {item.paymentMethod}{item.creditCard ? ` ${item.creditCard}` : ""}{item.target !== "self" ? ` · ${labelForOwner(item.target, viewer)}` : ""}</span>
+                    <span className="muted">{cycleLabel(item) ? `${cycleLabel(item)} · ` : ""}${item.amount.toLocaleString("zh-TW")} · {item.paymentMethod}{item.creditCard ? ` ${item.creditCard}` : ""}{item.target !== "self" ? ` · ${labelForOwner(item.target, viewer)}` : ""}</span>
                   </span>
                   {isRecorded
-                    ? <span className="fixed-done"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>本月已記錄</span>
+                    ? <span className="fixed-done"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>{cycleMonths(item) > 1 ? `已繳 ${(recordedIds.get(item.id) ?? "").slice(5).replace("-", "/")}` : "本月已記錄"}</span>
                     : <span className="fixed-todo">記錄</span>}
                 </button>
                 {isOpen && selectedItem ? <div className="fixed-editor">
@@ -500,7 +576,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
                     </label>
                   ) : null}
                   <div className="fixed-editor-actions">
-                    {isSubscriptionItem(selectedItem) ? <button className="btn secondary danger-text" type="button" onClick={deleteSelectedSubscription}>刪除這個訂閱</button> : null}
+                    {isSubscriptionItem(selectedItem) || isTalentItem(selectedItem) ? <button className="btn secondary danger-text" type="button" onClick={deleteSelectedSubscription}>{isTalentItem(selectedItem) ? "刪除這個才藝班" : "刪除這個訂閱"}</button> : null}
                     <button className="btn" type="button" onClick={importThisMonth} disabled={isSaving}>{isSaving ? "新增中..." : isRecorded ? "再新增一筆" : "新增這筆支出"}</button>
                   </div>
                 </div> : null}
@@ -509,6 +585,21 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
           </div>
         </div>
       ))}
+
+      <button className="btn secondary" type="button" onClick={() => setShowTalentForm((value) => !value)}>
+        {showTalentForm ? "收起新增才藝班" : "＋ 新增才藝班"}
+      </button>
+
+      {showTalentForm ? (
+        <form className="card grid" onSubmit={addTalentClass}>
+          <h3 style={{ margin: 0 }}>新增才藝班</h3>
+          <label className="field"><span>才藝班名稱</span><input className="input" value={talentName} onChange={(event) => setTalentName(event.target.value)} placeholder="例如 鋼琴、游泳、美術" /></label>
+          <label className="field"><span>每月金額</span><input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={talentAmount} onChange={(event) => setTalentAmount(event.target.value)} placeholder="例如 2400" /></label>
+          <label className="field"><span>付款方式</span><select className="select" value={talentPayment} onChange={(event) => setTalentPayment(event.target.value as "轉帳" | "現金" | "信用卡")}><option>轉帳</option><option>現金</option><option>信用卡</option></select></label>
+          <p className="muted" style={{ margin: 0 }}>會出現在「竣堯」分組，兩人都看得到；記錄時歸「學費」分類。</p>
+          <button className="btn" type="submit">儲存才藝班</button>
+        </form>
+      ) : null}
 
       <button className="btn secondary" type="button" onClick={() => setShowSubscriptionForm((value) => !value)}>
         {showSubscriptionForm ? "收起新增訂閱" : "＋ 新增個人訂閱"}
