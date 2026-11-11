@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useCurrentUser } from "@/components/AuthGate";
-import { EXPENSE_CATEGORIES, HOME_FEE_ITEMS, PAYMENT_METHOD_LABELS, TAX_ITEMS } from "@/lib/categories";
+import { EXPENSE_CATEGORIES, HOME_FEE_ITEMS, PAYMENT_METHOD_LABELS, TAX_ITEMS, categoryLabel } from "@/lib/categories";
 import { localDateString } from "@/lib/date";
 import { InstallmentScheduleItem, addExpenseRecord } from "@/lib/records";
 import { ExpenseCategory, PaymentMethod, PersonTarget } from "@/types/domain";
@@ -26,6 +26,15 @@ const CHILD_PAYER_LABEL = {
 
 function getCreditCards(viewer: Props["viewer"]): CreditCardName[] {
   return viewer === "chris" ? ["玉山", "國泰", "中信"] : ["台新", "國泰", "中信"];
+}
+
+/** 常用分類（4 欄 × 2 列，最後一格是「更多」）；其餘分類按「更多」展開。 */
+const MAIN_CATEGORIES: ExpenseCategory[] = ["餐飲", "交通", "生活用品", "醫療", "居家固定費", "娛樂", "衣物"];
+const MAX_DIGITS = 9;
+
+/** 金額算式：只允許數字與「+」，例如 120+85+60。 */
+function sumExpression(expression: string) {
+  return expression.split("+").reduce((total, part) => total + (Number(part) || 0), 0);
 }
 
 function shiftMonth(yyyymm: string, diff: number) {
@@ -52,6 +61,8 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
   const selfTarget: PersonTarget = viewer === "chris" ? "chris" : "wife";
   const creditCards = useMemo(() => getCreditCards(viewer), [viewer]);
   const [amount, setAmount] = useState("");
+  const [showAllCategories, setShowAllCategories] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const [date, setDate] = useState(localDateString());
   const [category, setCategory] = useState<ExpenseCategory>("餐飲");
   const [homeFeeItem, setHomeFeeItem] = useState<(typeof HOME_FEE_ITEMS)[number]>("水費");
@@ -85,7 +96,8 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
     { value: "cat", label: "貓" },
   ];
 
-  const parsedAmount = Number(amount);
+  const parsedAmount = sumExpression(amount);
+  const hasPlus = amount.includes("+");
   const parsedInstallmentTotal = Number(installmentTotal);
   const parsedInstallmentFee = Number(installmentFee || 0);
   const totalPayable = (parsedAmount || 0) + (parsedInstallmentFee || 0);
@@ -97,6 +109,23 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
     if (category === "居家固定費") return homeFeeItem;
     if (category === "稅金") return taxItem;
     return "";
+  }
+
+  function pressKey(key: string) {
+    setMessage("");
+    setAmount((current) => {
+      if (key === "back") return current.slice(0, -1);
+      if (key === "+") return current === "" || current.endsWith("+") ? current : `${current}+`;
+      const lastPart = current.split("+").at(-1) ?? "";
+      if (lastPart === "" && key === "00") key = "0";
+      const next = lastPart === "0" ? current.slice(0, -1) + key.replace(/^0+(?=\d)/, "") : current + key;
+      return (next.split("+").at(-1) ?? "").length > MAX_DIGITS ? current : next;
+    });
+  }
+
+  function typeAmount(value: string) {
+    setMessage("");
+    setAmount(value.replace(/[^0-9+]/g, "").replace(/\+{2,}/g, "+").replace(/^\+/, ""));
   }
 
   async function handleSave() {
@@ -171,27 +200,35 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
     }
   }
 
+  const summary = [
+    categoryLabel(category),
+    paymentMethod === "credit_card" ? `信用卡 ${creditCard}` : PAYMENT_METHOD_LABELS[paymentMethod as keyof typeof PAYMENT_METHOD_LABELS] ?? "其他",
+    targetLabels.find((item) => item.value === target)?.label ?? "",
+    date === localDateString() ? "今天" : date.slice(5).replace("-", "/"),
+  ].join(" · ");
+  const visibleCategories = showAllCategories ? EXPENSE_CATEGORIES : MAIN_CATEGORIES;
+  const keys = ["1", "2", "3", "back", "4", "5", "6", "+", "7", "8", "9", "save", "more", "0", "00"];
+
   return (
-    <section className="card grid">
-      <h2>新增支出</h2>
-      <p className="muted">一般支出預設就是目前登入者支付；只有竣堯的支出需要標記由誰付。</p>
-      <label className="field">
-        <span>日期</span>
-        <input className="input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-      </label>
-      <label className="field">
-        <span>金額</span>
-        <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="例如 3000" />
-      </label>
-      <label className="field">
-        <span>類別</span>
-        <select className="select" value={category} onChange={(event) => setCategory(event.target.value as ExpenseCategory)}>
-          {EXPENSE_CATEGORIES.map((item) => <option key={item}>{item}</option>)}
-        </select>
-      </label>
+    <section className="card grid expense-form">
+      <div className="amount-display">
+        <span className="amount-summary">{summary}</span>
+        <label className="amount-line">
+          <span className="amount-currency" aria-hidden="true">$</span>
+          <input className="amount-input" type="text" inputMode="none" autoComplete="off" aria-label="金額" placeholder="0" value={amount} style={{ width: `${Math.max(1, amount.length) + 0.6}ch` }} onChange={(event) => typeAmount(event.target.value)} />
+        </label>
+        {hasPlus ? <span className="amount-total">合計 ${parsedAmount.toLocaleString("zh-TW")}</span> : null}
+      </div>
+
+      <div className="category-grid" role="group" aria-label="分類">
+        {visibleCategories.map((item) => (
+          <button key={item} className={category === item ? "category-btn active" : "category-btn"} type="button" aria-pressed={category === item} onClick={() => setCategory(item)}>{categoryLabel(item)}</button>
+        ))}
+        <button className="category-btn more" type="button" aria-expanded={showAllCategories} onClick={() => setShowAllCategories((value) => !value)}>{showAllCategories ? "收合" : "更多…"}</button>
+      </div>
       {category === "居家固定費" ? (
         <label className="field">
-          <span>居家固定費細項</span>
+          <span>居家細項</span>
           <select className="select" value={homeFeeItem} onChange={(event) => setHomeFeeItem(event.target.value as (typeof HOME_FEE_ITEMS)[number])}>
             {HOME_FEE_ITEMS.map((item) => <option key={item}>{item}</option>)}
           </select>
@@ -205,12 +242,30 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
           </select>
         </label>
       ) : null}
-      <label className="field">
-        <span>消費歸屬</span>
-        <select className="select" value={target} onChange={(event) => setTarget(event.target.value as PersonTarget)}>
-          {targetLabels.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-        </select>
-      </label>
+
+      <div className="chip-fields">
+        <label className="chip-field">
+          <span>付款</span>
+          <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}>
+            {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        <label className="chip-field">
+          <span>對象</span>
+          <select value={target} onChange={(event) => setTarget(event.target.value as PersonTarget)}>
+            {targetLabels.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+          </select>
+        </label>
+        <label className="chip-field">
+          <span>日期</span>
+          <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+        </label>
+      </div>
+      {paymentMethod === "credit_card" ? (
+        <div className="card-choice" role="group" aria-label="信用卡">
+          {creditCards.map((card) => <button key={card} className={creditCard === card ? "category-btn active" : "category-btn"} type="button" aria-pressed={creditCard === card} onClick={() => setCreditCard(card)}>{card}</button>)}
+        </div>
+      ) : null}
       {target === "junyao" ? (
         <label className="field">
           <span>竣堯支出由誰付</span>
@@ -220,26 +275,18 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
           </select>
         </label>
       ) : null}
-      <label className="field">
-        <span>付款方式</span>
-        <select className="select" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}>
-          {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select>
-      </label>
-      {paymentMethod === "credit_card" ? (
-        <>
-          <label className="field">
-            <span>選擇信用卡</span>
-            <select className="select" value={creditCard} onChange={(event) => setCreditCard(event.target.value as CreditCardName)}>
-              {creditCards.map((card) => <option key={card}>{card}</option>)}
-            </select>
-          </label>
-          <label className="row" style={{ justifyContent: "flex-start" }}>
-            <input type="checkbox" checked={isInstallment} onChange={(event) => setIsInstallment(event.target.checked)} />
-            <span>信用卡分期</span>
-          </label>
-          {isInstallment ? (
-            <div className="card grid" style={{ boxShadow: "none" }}>
+      <input className="input" value={note} onChange={(event) => setNote(event.target.value)} placeholder="備註：例如 全聯" aria-label="備註" />
+
+      {showMore ? (
+        <div className="card grid" style={{ boxShadow: "none" }}>
+          {paymentMethod === "credit_card" ? (
+            <label className="row" style={{ justifyContent: "flex-start" }}>
+              <input type="checkbox" checked={isInstallment} onChange={(event) => setIsInstallment(event.target.checked)} />
+              <span>信用卡分期</span>
+            </label>
+          ) : <p className="muted" style={{ margin: 0 }}>付款方式選「信用卡」才能設定分期。</p>}
+          {paymentMethod === "credit_card" && isInstallment ? (
+            <>
               <label className="field">
                 <span>分期期數</span>
                 <input className="input" type="number" min="2" inputMode="numeric" pattern="[0-9]*" step="1" value={installmentTotal} onChange={(event) => setInstallmentTotal(event.target.value)} />
@@ -264,26 +311,30 @@ export function ExpenseQuickForm({ viewer, onSaved }: Props) {
                   ))}
                 </div>
               ) : null}
-            </div>
+            </>
           ) : null}
-        </>
+          <label className="row" style={{ justifyContent: "flex-start" }}>
+            <input type="checkbox" checked={isPrivate} onChange={(event) => setIsPrivate(event.target.checked)} />
+            <span>私人明細，共同帳本顯示「個人雜支」</span>
+          </label>
+          {isPrivate ? (
+            <label className="field">
+              <span>私人明細</span>
+              <input className="input" value={privateNote} onChange={(event) => setPrivateNote(event.target.value)} placeholder="僅本人可見的品項或備註" />
+            </label>
+          ) : null}
+        </div>
       ) : null}
-      <label className="row" style={{ justifyContent: "flex-start" }}>
-        <input type="checkbox" checked={isPrivate} onChange={(event) => setIsPrivate(event.target.checked)} />
-        <span>私人明細，共同帳本顯示「個人雜支」</span>
-      </label>
-      {isPrivate ? (
-        <label className="field">
-          <span>私人明細</span>
-          <input className="input" value={privateNote} onChange={(event) => setPrivateNote(event.target.value)} placeholder="僅本人可見的品項或備註" />
-        </label>
-      ) : null}
-      <label className="field">
-        <span>備註</span>
-        <input className="input" value={note} onChange={(event) => setNote(event.target.value)} placeholder="可空白，或輸入補充說明" />
-      </label>
-      <button className="btn" type="button" onClick={handleSave} disabled={isSaving}>{isSaving ? "儲存中..." : "儲存"}</button>
-      {message ? <p className="muted">{message}</p> : null}
+      {message ? <p className="muted" style={{ margin: 0 }}>{message}</p> : null}
+
+      <div className="keypad" role="group" aria-label="數字鍵盤">
+        {keys.map((key) => {
+          if (key === "save") return <button key={key} className="keypad-save" type="button" onClick={handleSave} disabled={isSaving}>{isSaving ? "儲存中" : "儲存"}</button>;
+          if (key === "more") return <button key={key} className="keypad-key small" type="button" aria-expanded={showMore} onClick={() => setShowMore((value) => !value)}>{showMore ? "收合" : "分期…"}</button>;
+          if (key === "back") return <button key={key} className="keypad-key alt" type="button" aria-label="刪除一位" onClick={() => pressKey("back")}>⌫</button>;
+          return <button key={key} className={key === "+" ? "keypad-key alt" : "keypad-key"} type="button" aria-label={key === "+" ? "加" : undefined} onClick={() => pressKey(key)}>{key}</button>;
+        })}
+      </div>
     </section>
   );
 }

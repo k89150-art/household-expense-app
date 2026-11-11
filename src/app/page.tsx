@@ -100,7 +100,7 @@ function HouseholdApp({ viewer }: { viewer: Viewer }) {
         <h1>{TAB_TITLES[activeTab]}</h1>
       </header>
 
-      {activeTab === "home" ? <FirestoreHomeSummary viewer={viewer} refreshKey={refreshKey} view="home" /> : null}
+      {activeTab === "home" ? <FirestoreHomeSummary viewer={viewer} refreshKey={refreshKey} view="home" onOpenRecords={() => openTab("records")} /> : null}
       {activeTab === "records" ? <FirestoreHomeSummary viewer={viewer} refreshKey={refreshKey} view="records" /> : null}
 
       {activeTab === "add" ? (

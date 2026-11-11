@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { advanceReimbursementDate, reimbursedAdvancesForPeriod } from "@/lib/advanceCashFlow";
+import { categoryLabel } from "@/lib/categories";
 import { currentMonthString } from "@/lib/date";
 import {
   getAllAdvanceRecords,
@@ -247,81 +248,117 @@ export function HouseholdReport() {
     return groups;
   }, {})).sort(([monthA], [monthB]) => monthB.localeCompare(monthA));
 
+  // 畫面用的比例（只用上方 report 已算好的數字，不新增計算規則）
+  const outflowPercent = report.incomeTotal > 0 ? Math.min(100, Math.round((report.totalOutflow / report.incomeTotal) * 100)) : report.totalOutflow > 0 ? 100 : 0;
+  const consumptionTotal = report.livingExpense + report.creditCardExpense;
+  const cashPercent = consumptionTotal > 0 ? Math.round((report.livingExpense / consumptionTotal) * 100) : 0;
+  const periodLabel = reportScope === "month" ? "本月" : "本年度";
+
   return (
     <section className="report-page grid">
-      <article className="report-hero">
-        <div>
-          <p className="report-kicker">{reportScope === "month" ? "MONTHLY REPORT" : "YEARLY REPORT"}</p>
-          <h2>{periodTitle}</h2>
-          <p>{isLoading ? `正在整理${periodNoun}的資料...` : "這裡只放統計與趨勢，首頁保留日常查看。"}</p>
+      <div className="report-toolbar">
+        <div className="segmented" role="group" aria-label="報表期間">
+          <button className={reportScope === "month" ? "active" : ""} type="button" aria-pressed={reportScope === "month"} onClick={() => setReportScope("month")}>月報</button>
+          <button className={reportScope === "year" ? "active" : ""} type="button" aria-pressed={reportScope === "year"} onClick={() => setReportScope("year")}>年報</button>
         </div>
-        <strong className={report.cashFlow >= 0 ? "positive" : "negative"}>{money(report.cashFlow)}</strong>
-      </article>
-
-      <article className="panel report-controls">
-        <div className="scope-toggle report-period-toggle">
-          <button className={reportScope === "month" ? "btn" : "btn secondary"} type="button" onClick={() => setReportScope("month")}>月報</button>
-          <button className={reportScope === "year" ? "btn" : "btn secondary"} type="button" onClick={() => setReportScope("year")}>年報</button>
+        <div className="month-bar">
+          <button className="icon-btn" type="button" aria-label={reportScope === "month" ? "上個月" : "上一年"} onClick={() => setSelectedMonth((value) => shiftMonth(value, reportScope === "month" ? -1 : -12))}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+          </button>
+          {reportScope === "month"
+            ? <input className="month-bar-input" type="month" aria-label="查詢月份" value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} />
+            : <select className="month-bar-input" aria-label="查詢年份" value={selectedYear} onChange={(event) => setSelectedMonth(`${event.target.value}-${selectedMonth.slice(5, 7)}`)}>
+              {yearOptions.map((year) => <option value={year} key={year}>{year}年</option>)}
+            </select>}
+          <button className="icon-btn" type="button" aria-label={reportScope === "month" ? "下個月" : "下一年"} onClick={() => setSelectedMonth((value) => shiftMonth(value, reportScope === "month" ? 1 : 12))}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
+          </button>
         </div>
-        <button className="btn secondary" type="button" onClick={() => setSelectedMonth((value) => shiftMonth(value, reportScope === "month" ? -1 : -12))}>{reportScope === "month" ? "上個月" : "上一年"}</button>
-        {reportScope === "month" ? <label className="month-field">
-          <span>查詢月份</span>
-          <input className="input month-input" type="month" value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} />
-        </label> : <label className="month-field">
-          <span>查詢年份</span>
-          <select className="select month-input" value={selectedYear} onChange={(event) => setSelectedMonth(`${event.target.value}-${selectedMonth.slice(5, 7)}`)}>
-            {yearOptions.map((year) => <option value={year} key={year}>{year}年</option>)}
-          </select>
-        </label>}
-        <button className="btn secondary" type="button" onClick={() => setSelectedMonth((value) => shiftMonth(value, reportScope === "month" ? 1 : 12))}>{reportScope === "month" ? "下個月" : "下一年"}</button>
-      </article>
+      </div>
+      {isLoading ? <p className="muted records-note">正在整理{periodNoun}的資料...</p> : null}
+      {message ? <p className="muted records-note" role="status">{message}</p> : null}
 
-      <section className="report-metrics">
-        <article><span>收入</span><strong>{money(report.incomeTotal)}</strong></article>
-        <article><span>{reportScope === "month" ? "本月現金流" : "年度現金流"}</span><strong className={report.cashFlow >= 0 ? "positive" : "negative"}>{money(report.cashFlow)}</strong></article>
-        <article><span>生活支出</span><strong>{money(report.livingExpense)}</strong></article>
-        <article><span>信用卡繳款</span><strong>{money(report.cardPaymentTotal)}</strong></article>
-      </section>
-
-      <article className="panel report-breakdown">
-        <div className="journal-head compact">
-          <div>
-            <h2>收支結構</h2>
-            <p>把{periodNoun}的錢分成真正流出的幾個方向。</p>
+      <article className="card home-hero">
+        <div className="home-ring" role="img" aria-label={`${periodTitle}現金支出佔收入 ${outflowPercent}%`} style={{ background: `conic-gradient(var(--accent) 0 ${outflowPercent}%, var(--paper-warm) ${outflowPercent}% 100%)` }}>
+          <div className="home-ring-inner">
+            <span>{reportScope === "month" ? "本月現金流" : "年度現金流"}</span>
+            <strong className={report.cashFlow >= 0 ? undefined : "negative"}>{money(report.cashFlow)}</strong>
+            <span>已付出 {outflowPercent}%</span>
           </div>
         </div>
-        <div className="report-stack">
-          <div><span>生活</span><strong>{money(report.livingExpense)}</strong></div>
-          <div><span>信用卡繳款</span><strong>{money(report.cardPaymentTotal)}</strong></div>
-          <div><span>現付代墊</span><strong>{money(report.paidNowAdvance)}</strong></div>
+        <div className="home-hero-stats">
+          <div><span>收入</span><strong className="positive">{money(report.incomeTotal)}</strong></div>
+          <div><span>現金流出</span><strong>{money(report.totalOutflow)}</strong></div>
+          <div><span>已收回代墊</span><strong>{money(report.reimbursedAdvance)}</strong></div>
         </div>
-        <p className="muted">公式：收入 - 現付生活支出 - 現付代墊 - 信用卡繳款 + 已收回代墊 = {money(report.cashFlow)}</p>
-        <p className="muted">{reportScope === "month" ? "本月" : "本年度"}刷卡消費：{money(report.creditCardExpense)}；已收回代墊：{money(report.reimbursedAdvance)}</p>
       </article>
 
-      <article className="panel report-list">
-        <div className="journal-head compact">
-          <div>
-            <h2>支出分類</h2>
-            <p>看{periodNoun}主要花在哪裡。</p>
-          </div>
+      <article className="card report-section">
+        <h2>收支結構</h2>
+        <div className="ledger-rows">
+          <div><span>收入</span><strong className="positive">+{money(report.incomeTotal)}</strong></div>
+          <div><span>現付生活支出</span><strong>−{money(report.livingExpense)}</strong></div>
+          <div><span>現付代墊</span><strong>−{money(report.paidNowAdvance)}</strong></div>
+          <div><span>信用卡繳款</span><strong>−{money(report.cardPaymentTotal)}</strong></div>
+          <div><span>已收回代墊</span><strong className="positive">+{money(report.reimbursedAdvance)}</strong></div>
+          <div className="total"><span>{periodLabel}現金流</span><strong>{money(report.cashFlow)}</strong></div>
         </div>
+        <p className="muted report-footnote">{periodLabel}刷卡消費 {money(report.creditCardExpense)} 不直接計入現金流，等繳卡費時以「信用卡繳款」計入，避免重複計算。</p>
+      </article>
+
+      <article className="card report-section">
+        <h2>支出分類</h2>
         {report.categoryLines.length === 0 ? <p className="muted">{periodNoun}還沒有支出資料。</p> : null}
-        {report.categoryLines.slice(0, 8).map((line) => (
-          <div className="report-bar" key={line.label}>
-            <div className="row"><span>{line.label}</span><strong>{money(line.amount)}</strong></div>
-            <span style={{ width: `${Math.max(8, Math.round((line.amount / maxCategory) * 100))}%` }} />
-          </div>
-        ))}
+        <div className="bar-rows">
+          {report.categoryLines.slice(0, 8).map((line) => (
+            <div className="bar-row" key={line.label}>
+              <span>{categoryLabel(line.label)}</span>
+              <div className="home-bar thick"><span style={{ width: `${Math.max(4, Math.round((line.amount / maxCategory) * 100))}%` }} /></div>
+              <strong>{money(line.amount)}</strong>
+            </div>
+          ))}
+        </div>
+        <p className="muted report-footnote">依消費日統計，包含現金與刷卡消費。</p>
       </article>
 
-      <article className="panel report-list advance-history">
-        <div className="journal-head compact">
-          <div>
-            <h2>代墊款紀錄</h2>
-            <p>依代墊月份保留完整紀錄；收回款只計入實際收回月份的現金流。</p>
+      <article className="card report-section">
+        <h2>付款方式</h2>
+        {consumptionTotal === 0 ? <p className="muted">{periodNoun}還沒有支出資料。</p> : <>
+          <div className="split-bar" role="img" aria-label={`現金 ${cashPercent}%、信用卡 ${100 - cashPercent}%`}>
+            <span className="cash" style={{ width: `${cashPercent}%` }} />
+            <span className="card-part" style={{ width: `${100 - cashPercent}%` }} />
           </div>
-        </div>
+          <div className="split-legend">
+            <span><i className="cash" />現金 {cashPercent}%・{money(report.livingExpense)}</span>
+            <span><i className="card-part" />信用卡 {100 - cashPercent}%・{money(report.creditCardExpense)}</span>
+          </div>
+        </>}
+        {report.creditCardLines.length > 0 ? <div className="bar-rows">
+          {report.creditCardLines.map((line) => (
+            <div className="bar-row" key={line.label}>
+              <span>{line.label}</span>
+              <div className="home-bar thick"><span style={{ width: `${Math.max(4, Math.round((line.amount / maxCreditCard) * 100))}%` }} /></div>
+              <strong>{money(line.amount)}</strong>
+            </div>
+          ))}
+        </div> : null}
+        {report.payerLines.length > 0 ? <>
+          <h3 className="report-subtitle">誰先付款</h3>
+          <div className="bar-rows">
+            {report.payerLines.map((line) => (
+              <div className="bar-row" key={line.label}>
+                <span>{line.label}</span>
+                <div className="home-bar thick"><span style={{ width: `${Math.max(4, Math.round((line.amount / maxPayer) * 100))}%` }} /></div>
+                <strong>{money(line.amount)}</strong>
+              </div>
+            ))}
+          </div>
+        </> : null}
+      </article>
+
+      <article className="card report-section advance-history">
+        <h2>代墊款紀錄</h2>
+        <p className="muted report-footnote">依代墊月份保留完整紀錄；收回款只計入實際收回月份的現金流。</p>
         {advanceMonthGroups.length === 0 ? <p className="muted">{periodNoun}還沒有代墊款紀錄。</p> : null}
         {advanceMonthGroups.map(([month, monthRecords], index) => (
           <details className="advance-month-group" key={month} open={reportScope === "month" || index === 0}>
@@ -350,45 +387,9 @@ export function HouseholdReport() {
         ))}
       </article>
 
-      <article className="panel report-list report-payer">
-        <div className="journal-head compact">
-          <div>
-            <h2>付款分布</h2>
-            <p>快速看{periodNoun}誰先付款比較多。</p>
-          </div>
-        </div>
-        {report.payerLines.length === 0 ? <p className="muted">{periodNoun}還沒有付款資料。</p> : null}
-        {report.payerLines.map((line) => (
-          <div className="report-bar compact" key={line.label}>
-            <div className="row"><span>{line.label}</span><strong>{money(line.amount)}</strong></div>
-            <span style={{ width: `${Math.max(8, Math.round((line.amount / maxPayer) * 100))}%` }} />
-          </div>
-        ))}
-      </article>
-
-      <article className="panel report-list report-credit-card">
-        <div className="journal-head compact">
-          <div>
-            <h2>信用卡分布</h2>
-            <p>共同查帳用；首頁只顯示登入者自己的信用卡。</p>
-          </div>
-        </div>
-        {report.creditCardLines.length === 0 ? <p className="muted">{periodNoun}還沒有信用卡消費。</p> : null}
-        {report.creditCardLines.map((line) => (
-          <div className="report-bar compact" key={line.label}>
-            <div className="row"><span>{line.label}</span><strong>{money(line.amount)}</strong></div>
-            <span style={{ width: `${Math.max(8, Math.round((line.amount / maxCreditCard) * 100))}%` }} />
-          </div>
-        ))}
-      </article>
-
-      <article className="panel report-list">
-        <div className="journal-head compact">
-          <div>
-            <h2>明細搜尋</h2>
-            <p>搜尋{periodSearchLabel}的支出、收入、代墊與信用卡繳款。</p>
-          </div>
-        </div>
+      <article className="card report-section">
+        <h2>明細搜尋</h2>
+        <p className="muted report-footnote">搜尋{periodSearchLabel}的支出、收入、代墊與信用卡繳款。</p>
         <div className="report-search-controls">
           <label className="field report-search-keyword">
             <span>關鍵字</span>
@@ -437,7 +438,6 @@ export function HouseholdReport() {
           ))}
           {filteredSearchRecords.length > 80 ? <p className="muted">目前顯示最新 80 筆，請增加搜尋條件縮小範圍。</p> : null}
         </div>
-        {message ? <p className="muted">{message}</p> : null}
       </article>
     </section>
   );

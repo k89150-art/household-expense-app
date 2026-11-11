@@ -16,6 +16,11 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "其他",
 ];
 
+/** 畫面上的分類短名稱（資料庫仍存原本的分類名稱）。 */
+export function categoryLabel(category: string) {
+  return category === "居家固定費" ? "居家" : category;
+}
+
 export const HOME_FEE_ITEMS = ["水費", "電費", "瓦斯費", "管理費"] as const;
 export const TAX_ITEMS = ["牌照稅", "房屋稅", "所得稅", "燃料稅", "地價稅"] as const;
 

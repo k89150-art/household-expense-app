@@ -6,6 +6,7 @@ import { IncomeEditForm } from "@/components/IncomeEditForm";
 import { LoanRepaymentForm } from "@/components/LoanRepaymentForm";
 import { reimbursedAdvancesForPeriod } from "@/lib/advanceCashFlow";
 import { cardActivityRange, cardStatementLabel, isInCardStatement, monthDiff, monthLabel, nextLegacyInstallmentState, shiftMonth, statementRangeForCard } from "@/lib/cardBilling";
+import { categoryLabel } from "@/lib/categories";
 import { currentMonthString, localDateString } from "@/lib/date";
 import {
   addCardPaymentRecord,
@@ -50,13 +51,26 @@ import type { LoanRepaymentFields, LoanRepaymentRecord } from "@/types/loanRepay
 
 type Scope = "month" | "all";
 type CreditCardTab = "due" | "unbilled" | "paid";
-type Props = { viewer: Viewer; refreshKey?: number; view?: "home" | "records" };
+type RecordFilter = "all" | "expense" | "income";
+const RECORD_FILTERS: [RecordFilter, string][] = [["all", "全部"], ["expense", "支出"], ["income", "收入"]];
+const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
+type RecordItemBase = { key: string; date: string; amount: number; badge: string; title: string; meta: string; status: string; statusTone: "" | "warn" | "ok" | "void"; searchable: string };
+type RecordItem = (RecordItemBase & { kind: "expense"; expense: ExpenseRecord; canRepay: boolean }) | (RecordItemBase & { kind: "income"; income: IncomeRecord });
+
+type Props = { viewer: Viewer; refreshKey?: number; view?: "home" | "records"; onOpenRecords?: () => void };
 type CardLine = { date: string; label: string; amount: number; kind: "expense" | "advance" | "installment" | "legacyInstallment"; sourceExpense?: ExpenseRecord };
 const CARD_PAYMENT_FEES: Partial<Record<CreditCardName, number>> = {
   中信: 10,
 };
 
 const TARGET_LABELS: Record<string, string> = { chris: "我", wife: "我", junyao: "竣堯", cat: "貓" };
+
+function paymentLabel(record: ExpenseRecord) {
+  if (record.paymentMethod === "credit_card") return record.creditCard ? `信用卡 ${record.creditCard}` : "信用卡";
+  if (record.paymentMethod === "cash") return "現金";
+  if (record.paymentMethod === "bank_transfer") return "扣款／轉帳";
+  return "其他";
+}
 
 function money(value = 0) {
   return `$${value.toLocaleString("zh-TW")}`;
@@ -157,27 +171,6 @@ function displayPaidBy(record: ExpenseRecord, viewer: Viewer) {
   return viewer === "wife" ? "我" : "太太";
 }
 
-function groupByTarget(records: ExpenseRecord[]) {
-  return records.reduce<Record<string, ExpenseRecord[]>>((groups, record) => {
-    groups[record.target] = [...(groups[record.target] ?? []), record];
-    return groups;
-  }, {});
-}
-
-function groupByCategory(records: ExpenseRecord[]) {
-  return records.reduce<Record<string, ExpenseRecord[]>>((groups, record) => {
-    groups[record.category] = [...(groups[record.category] ?? []), record];
-    return groups;
-  }, {});
-}
-
-function groupByOwner<T extends { owner: "chris" | "wife" }>(records: T[]) {
-  return records.reduce<Record<string, T[]>>((groups, record) => {
-    groups[record.owner] = [...(groups[record.owner] ?? []), record];
-    return groups;
-  }, {});
-}
-
 function ownerLabel(owner: "chris" | "wife", viewer: Viewer) {
   if (owner === "chris") return viewer === "chris" ? "我" : "先生";
   return viewer === "wife" ? "我" : "太太";
@@ -260,7 +253,7 @@ function getErrorCode(error: unknown) {
   return "unknown";
 }
 
-export function FirestoreHomeSummary({ viewer, refreshKey = 0, view = "home" }: Props) {
+export function FirestoreHomeSummary({ viewer, refreshKey = 0, view = "home", onOpenRecords }: Props) {
   const user = useCurrentUser();
   const [selectedMonth, setSelectedMonth] = useState(currentMonthString());
   const [scope, setScope] = useState<Scope>("month");
@@ -274,9 +267,10 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0, view = "home" }: 
   const [dueBillPayments, setDueBillPayments] = useState<CardPaymentRecord[]>([]);
   const [legacyInstallments, setLegacyInstallments] = useState<LegacyInstallmentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [openedTarget, setOpenedTarget] = useState<string | null>(null);
-  const [openedCategory, setOpenedCategory] = useState<string | null>(null);
-  const [showIncomes, setShowIncomes] = useState(false);
+  const [recordFilter, setRecordFilter] = useState<RecordFilter>("all");
+  const [mineOnly, setMineOnly] = useState(false);
+  const [keyword, setKeyword] = useState("");
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [showAdvances, setShowAdvances] = useState(false);
   const [showCreditCards, setShowCreditCards] = useState(false);
   const [creditCardTab, setCreditCardTab] = useState<CreditCardTab>("unbilled");
@@ -538,11 +532,90 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0, view = "home" }: 
   const ownPaidNowAdvance = advances.filter((record) => record.paymentMethod !== "credit_card" && record.owner === viewer).reduce((sum, record) => sum + record.amount, 0);
   const ownReimbursedAdvance = reimbursementRecords.filter((record) => record.owner === viewer).reduce((sum, record) => sum + record.amount, 0);
   const cardPaymentTotal = ownCardPayments.reduce((sum, record) => sum + record.amount, 0);
-  const advanceCashFlow = paidNowAdvance - reimbursedAdvance;
   const familyAvailableBalance = totalIncome - paidNowExpense - paidNowAdvance - totalCardPayment + reimbursedAdvance;
   const personalCashFlow = ownIncome - ownPaidNowExpense - ownPaidNowAdvance - cardPaymentTotal + ownReimbursedAdvance;
-  const groupedTargets = useMemo(() => groupByTarget(expenses), [expenses]);
-  const groupedIncomes = useMemo(() => groupByOwner(incomes), [incomes]);
+  // 首頁：環形圖（本月已付出佔收入比例）、前三名分類、最近紀錄
+  const familyOutflow = Math.max(0, totalIncome - familyAvailableBalance);
+  const spentPercent = totalIncome > 0 ? Math.min(100, Math.round((familyOutflow / totalIncome) * 100)) : familyOutflow > 0 ? 100 : 0;
+  const categoryTotals = expenses.reduce<Record<string, number>>((totals, record) => {
+    totals[record.category] = (totals[record.category] ?? 0) + record.amount;
+    return totals;
+  }, {});
+  const topCategoryEntries = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const topCategoryMax = topCategoryEntries[0]?.[1] ?? 0;
+  const topCategories = topCategoryEntries.map(([category, amount]) => ({
+    category,
+    label: categoryLabel(category),
+    amount,
+    percent: topCategoryMax > 0 ? Math.max(4, Math.round((amount / topCategoryMax) * 100)) : 0,
+  }));
+  const recentRecords = [
+    ...expenses.map((record) => ({
+      key: `e-${record.id}`,
+      kind: "expense" as const,
+      date: record.date,
+      amount: record.amount,
+      badge: categoryLabel(record.category).slice(0, 2),
+      title: record.note || categoryLabel(record.category),
+      meta: [record.date.slice(5).replace("-", "/"), categoryLabel(record.category), paymentLabel(record)].join(" · "),
+    })),
+    ...incomes.map((record) => ({
+      key: `i-${record.id}`,
+      kind: "income" as const,
+      date: record.date,
+      amount: record.amount,
+      badge: "收入",
+      title: record.note || record.category,
+      meta: [record.date.slice(5).replace("-", "/"), record.category, ownerLabel(record.owner, viewer)].join(" · "),
+    })),
+  ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
+  // 紀錄頁：篩選、搜尋、依日期分組（只做畫面整理，不改變任何計算）
+  const normalizedKeyword = keyword.trim().toLocaleLowerCase("zh-TW");
+  const recordItems: RecordItem[] = [
+    ...(recordFilter === "income" ? [] : expenses.filter((record) => !mineOnly || record.paidBy === viewer).map((record): RecordItem => {
+      const repayment = loanRepayments?.[record.id];
+      const title = record.isPrivate ? "個人雜支" : record.note || categoryLabel(record.category);
+      const meta = [
+        categoryLabel(record.category),
+        paymentLabel(record),
+        displayTarget(record, viewer),
+        record.target === "junyao" ? `${displayPaidBy(record, viewer)}付` : "",
+      ].filter(Boolean).join(" · ");
+      const status = repayment
+        ? `${LOAN_KEY_LABELS[repayment.loanKey]}${repayment.status === "VOID" ? "明細已作廢" : repayment.stage === "PENDING_DEBIT" ? `待銀行扣款・預定 ${repayment.dueDate.slice(5)}` : `銀行已扣款・本金 ${money(repayment.principal)}`}`
+        : "";
+      const statusTone = !repayment ? "" : repayment.status === "VOID" ? "void" : repayment.stage === "PENDING_DEBIT" ? "warn" : "ok";
+      return {
+        key: `e-${record.id}`, kind: "expense", expense: record, date: record.date, amount: record.amount,
+        badge: record.isPrivate ? "個人" : categoryLabel(record.category).slice(0, 2), title, meta, status, statusTone,
+        canRepay: Boolean(loanRepayments && (repayment || isLoanExpenseCandidate(record))),
+        searchable: [title, record.isPrivate ? "" : record.note, record.category, meta, status, String(record.amount), record.date].filter(Boolean).join(" ").toLocaleLowerCase("zh-TW"),
+      };
+    })),
+    ...(recordFilter === "expense" ? [] : incomes.filter((record) => !mineOnly || record.owner === viewer).map((record): RecordItem => {
+      const title = record.note || record.category;
+      const meta = [record.category, ownerLabel(record.owner, viewer)].join(" · ");
+      return {
+        key: `i-${record.id}`, kind: "income", income: record, date: record.date, amount: record.amount,
+        badge: "收入", title, meta, status: "", statusTone: "",
+        searchable: [title, record.category, record.note, meta, String(record.amount), record.date].filter(Boolean).join(" ").toLocaleLowerCase("zh-TW"),
+      };
+    })),
+  ].filter((item) => !normalizedKeyword || item.searchable.includes(normalizedKeyword))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const listExpenseTotal = recordItems.reduce((sum, item) => sum + (item.kind === "expense" ? item.amount : 0), 0);
+  const listIncomeTotal = recordItems.reduce((sum, item) => sum + (item.kind === "income" ? item.amount : 0), 0);
+  const recordGroups = recordItems.reduce<{ date: string; label: string; items: RecordItem[] }[]>((groups, item) => {
+    const last = groups.at(-1);
+    if (last && last.date === item.date) {
+      last.items.push(item);
+    } else {
+      const weekday = WEEKDAYS[new Date(`${item.date}T00:00:00`).getDay()];
+      const label = scope === "all" ? `${item.date.replace(/-/g, "/")} 週${weekday}` : `${item.date.slice(5).replace("-", "/")} 週${weekday}`;
+      groups.push({ date: item.date, label, items: [item] });
+    }
+    return groups;
+  }, []);
   const activeLegacyInstallments = useMemo(() => legacyInstallments.filter((record) => record.isActive && (record.owner ?? "chris") === viewer), [legacyInstallments, viewer]);
   const creditCardGroups = useMemo(() => groupDueCreditCardBills(ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, selectedMonth), [ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, selectedMonth]);
   const dueCreditCardGroups = useMemo(() => groupDueCreditCardBills(ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, dueBillMonth), [ownDueAdvances, ownCreditCardExpenses, activeLegacyInstallments, dueBillMonth]);
@@ -601,115 +674,111 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0, view = "home" }: 
     <section className="home-summary grid">
       {/* 首頁固定顯示本月；查其他月份請到「紀錄」頁 */}
       {view === "records" ? <>
-      <article className="card grid">
-        <div className="month-picker">
-          <button className="btn secondary" type="button" onClick={() => setSelectedMonth((value) => shiftMonth(value, -1))}>上個月</button>
-          <label className="month-field">
-            <span>月份</span>
-            <input className="input month-input" type="month" value={selectedMonth} onChange={(event) => {
-              setSelectedMonth(event.target.value);
-              setScope("month");
-            }} />
-          </label>
-          <button className="btn secondary" type="button" onClick={() => setSelectedMonth((value) => shiftMonth(value, 1))}>下個月</button>
-        </div>
-        <div className="scope-toggle">
-          <button className={scope === "month" ? "btn" : "btn secondary"} type="button" onClick={() => {
-            setSelectedMonth(currentMonthString());
-            setScope("month");
-          }}>當月</button>
-          <button className={scope === "all" ? "btn" : "btn secondary"} type="button" onClick={() => setScope("all")}>全部月份</button>
-        </div>
-      </article>
+      <div className="month-bar">
+        <button className="icon-btn" type="button" aria-label="上個月" onClick={() => { setScope("month"); setSelectedMonth((value) => shiftMonth(value, -1)); }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+        </button>
+        <input className="month-bar-input" type="month" aria-label="月份" value={selectedMonth} onChange={(event) => { setSelectedMonth(event.target.value); setScope("month"); }} />
+        <button className="icon-btn" type="button" aria-label="下個月" onClick={() => { setScope("month"); setSelectedMonth((value) => shiftMonth(value, 1)); }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+      </div>
       </> : null}
 
       {view === "home" ? <>
-      <article className="card grid summary-hero">
-        <h2>{scope === "month" ? "本月剩餘可用金額" : "目前月份剩餘可用金額"}</h2>
-        <div className="row"><span>家庭剩餘</span><strong>{money(familyAvailableBalance)}</strong></div>
-        <div className="cashflow-pair">
-          <div>
-            <span>我的現金流</span>
-            <strong>{money(personalCashFlow)}</strong>
-          </div>
-          <div>
-            <span>個人信用卡繳款</span>
-            <strong>{money(cardPaymentTotal)}</strong>
+      <article className="card summary-hero home-hero">
+        <div className="home-ring" role="img" aria-label={`本月已付出 ${spentPercent}%`} style={{ background: `conic-gradient(var(--accent) 0 ${spentPercent}%, var(--paper-warm) ${spentPercent}% 100%)` }}>
+          <div className="home-ring-inner">
+            <span>本月剩餘</span>
+            <strong>{money(familyAvailableBalance)}</strong>
+            <span>已付出 {spentPercent}%</span>
           </div>
         </div>
-        <div className="row"><span>本月收入</span><strong>{money(totalIncome)}</strong></div>
-        <div className="row"><span>已付生活支出</span><strong>{money(paidNowExpense)}</strong></div>
-        <div className="row"><span>家庭信用卡繳款</span><strong>{money(totalCardPayment)}</strong></div>
-        {advanceCashFlow !== 0 ? <div className="row"><span>代墊款現金流</span><strong>{money(advanceCashFlow)}</strong></div> : null}
-        <p className="muted" style={{ margin: 0 }}>家庭剩餘用共同帳本計算；我的現金流只看本人收入、本人付款與本人信用卡繳款。</p>
-        {isLoading ? <p className="muted">讀取中...</p> : null}
-        {message ? <p className="muted">{message}</p> : null}
+        <div className="home-hero-stats">
+          <div><span>收入</span><strong className="positive">{money(totalIncome)}</strong></div>
+          <div><span>已付出</span><strong>{money(familyOutflow)}</strong></div>
+          <div><span>我的現金流</span><strong>{money(personalCashFlow)}</strong></div>
+        </div>
+        {isLoading ? <p className="muted home-hero-note">讀取中...</p> : null}
+        {message ? <p className="muted home-hero-note">{message}</p> : null}
+      </article>
+
+      {topCategories.length > 0 ? <div className="home-top-categories">
+        {topCategories.map((item) => <div className="home-top-category" key={item.category}>
+          <span>{item.label}</span>
+          <strong>{money(item.amount)}</strong>
+          <div className="home-bar"><span style={{ width: `${item.percent}%` }} /></div>
+        </div>)}
+      </div> : null}
+
+      <article className="card home-recent">
+        <div className="home-recent-head">
+          <h2>最近紀錄</h2>
+          {onOpenRecords ? <button className="link-btn" type="button" onClick={onOpenRecords}>全部</button> : null}
+        </div>
+        {recentRecords.length === 0 && !isLoading ? <p className="muted" style={{ margin: 0 }}>這個月還沒有紀錄</p> : null}
+        {recentRecords.map((item) => <div className="home-recent-row" key={item.key}>
+          <span className={item.kind === "income" ? "home-recent-icon income" : "home-recent-icon"}>{item.badge}</span>
+          <span className="home-recent-main"><span>{item.title}</span><span className="muted">{item.meta}</span></span>
+          <strong className={item.kind === "income" ? "positive" : undefined}>{item.kind === "income" ? "+" : "−"}{money(item.amount)}</strong>
+        </div>)}
       </article>
       </> : null}
 
       {view === "records" ? <>
-      {isLoading || message ? <article className="card grid">{isLoading ? <p className="muted" style={{ margin: 0 }}>讀取中...</p> : null}{message ? <p className="muted" style={{ margin: 0 }}>{message}</p> : null}</article> : null}
-      <article className="card grid">
-        <button className="row" type="button" onClick={() => setShowIncomes((value) => !value)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
-          <div><h2 style={{ margin: 0 }}>收入紀錄</h2><div className="muted">點一下看收入明細</div></div>
-          <strong>{money(totalIncome)}</strong>
-        </button>
-        {showIncomes ? <div className="grid">
-          {incomes.length === 0 ? <p className="muted">這個月份沒有收入資料</p> : null}
-          {Object.entries(groupedIncomes).map(([owner, ownerRecords]) => <div className="card grid" style={{ boxShadow: "none" }} key={owner}>
-            <div className="row"><strong>{ownerLabel(owner as "chris" | "wife", viewer)}</strong><strong>{money(ownerRecords.reduce((sum, record) => sum + record.amount, 0))}</strong></div>
-            {ownerRecords.map((record) => <div className="grid entry-wrap" key={record.id}>
-              <div className="entry-row">
-                <span className="entry-date">{record.date.slice(5)}</span>
-                <span className="entry-title">{record.category}{record.note ? `・${record.note}` : ""}</span>
-                <span className="entry-amount">{money(record.amount)}</span>
-                <span className="entry-buttons"><button className="btn secondary entry-btn" type="button" disabled={pendingAction !== null} onClick={() => setEditingIncomeId(editingIncomeId === record.id ? null : record.id)}>{editingIncomeId === record.id ? "收合" : "修改"}</button><button className="btn secondary entry-btn" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteIncome(record.id)}>刪除</button></span>
-              </div>
-              {editingIncomeId === record.id ? <IncomeEditForm record={record} disabled={pendingAction !== null} onSave={(changes) => handleUpdateIncome(record.id, changes)} onCancel={() => setEditingIncomeId(null)} /> : null}
-            </div>)}
-          </div>)}
-        </div> : null}
-      </article>
+      {isLoading || message ? <p className="muted records-note">{isLoading ? "讀取中..." : message}</p> : null}
+      <div className="records-toolbar">
+        <input className="input" type="search" aria-label="搜尋紀錄" placeholder="搜尋備註、分類、金額" value={keyword} onChange={(event) => setKeyword(event.target.value)} />
+        <div className="filter-chips" role="group" aria-label="篩選紀錄">
+          {RECORD_FILTERS.map(([value, label]) => <button key={value} className={recordFilter === value ? "chip active" : "chip"} type="button" aria-pressed={recordFilter === value} onClick={() => setRecordFilter(value)}>{label}</button>)}
+          <button className={mineOnly ? "chip active" : "chip"} type="button" aria-pressed={mineOnly} onClick={() => setMineOnly((value) => !value)}>只看我的</button>
+          {scope === "month" && selectedMonth !== currentMonthString() ? <button className="chip" type="button" onClick={() => setSelectedMonth(currentMonthString())}>回本月</button> : null}
+          <button className={scope === "all" ? "chip active" : "chip"} type="button" aria-pressed={scope === "all"} onClick={() => setScope(scope === "all" ? "month" : "all")}>全部月份</button>
+        </div>
+        <div className="records-totals">
+          <span>支出 <strong>{money(listExpenseTotal)}</strong></span>
+          <span>收入 <strong className="positive">{money(listIncomeTotal)}</strong></span>
+        </div>
+      </div>
 
-      {expenses.length === 0 && !isLoading ? <article className="card grid"><h2>尚無支出</h2><p className="muted" style={{ margin: 0 }}>到「新增」頁儲存第一筆支出後，這裡就會出現正式資料。</p></article> : null}
+      {recordGroups.length === 0 && !isLoading ? <article className="card"><p className="muted" style={{ margin: 0 }}>{expenses.length === 0 && incomes.length === 0 ? "這段期間還沒有紀錄。按下方「＋」新增第一筆。" : "沒有符合條件的紀錄。"}</p></article> : null}
 
-      {Object.entries(groupedTargets).map(([target, targetRecords]) => {
-        const isOpen = openedTarget === target;
-        const targetTotal = targetRecords.reduce((sum, record) => sum + record.amount, 0);
-        const groupedCategories = groupByCategory(targetRecords);
-        const sample = targetRecords[0];
-        return <article className="card grid" key={target}>
-          <button className="row" type="button" onClick={() => { setOpenedTarget(isOpen ? null : target); setOpenedCategory(null); }} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
-            <div><h2 style={{ margin: 0 }}>{sample ? displayTarget(sample, viewer) : target}</h2><div className="muted">點一下看分類</div></div>
-            <strong>{money(targetTotal)}</strong>
-          </button>
-          {isOpen ? <div className="grid">{Object.entries(groupedCategories).map(([category, categoryRecords]) => {
-            const categoryKey = `${target}-${category}`;
-            const isCategoryOpen = openedCategory === categoryKey;
-            const categoryTotal = categoryRecords.reduce((sum, record) => sum + record.amount, 0);
-            return <div className="card grid" style={{ boxShadow: "none" }} key={categoryKey}>
-              <button className="row" type="button" onClick={() => setOpenedCategory(isCategoryOpen ? null : categoryKey)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
-                <strong>{category}</strong><span className="muted">{money(categoryTotal)}・{isCategoryOpen ? "收合" : "明細"}</span>
-              </button>
-              {isCategoryOpen ? <div className="grid">{categoryRecords.map((record) => {
-                const repayment = loanRepayments?.[record.id];
-                const meta = [
-                  repayment ? `${LOAN_KEY_LABELS[repayment.loanKey]}${repayment.status === "VOID" ? "明細已作廢" : repayment.stage === "PENDING_DEBIT" ? `待銀行扣款・預定 ${repayment.dueDate.slice(5)}` : `銀行已扣款・本金 ${money(repayment.principal)}`}` : "",
-                  record.creditCard ?? "",
-                  record.target === "junyao" ? `${displayPaidBy(record, viewer)}付` : "",
-                ].filter(Boolean).join("・");
-                return <div className="entry-wrap" key={record.id}><div className="entry-row">
-                <span className="entry-date">{record.date.slice(5)}</span>
-                <span className="entry-title">{record.isPrivate ? "個人雜支" : record.note || record.category}</span>
-                <span className="entry-amount">{money(record.amount)}</span>
-                {meta ? <span className="entry-meta muted">{meta}</span> : null}
-                <span className="entry-buttons">{loanRepayments && (repayment || isLoanExpenseCandidate(record)) ? <button className="btn secondary entry-btn" type="button" disabled={pendingAction !== null} onClick={() => setEditingRepaymentId(editingRepaymentId === record.id ? null : record.id)}>{editingRepaymentId === record.id ? "收合" : "還款明細"}</button> : null}<button className="btn secondary entry-btn" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteExpense(record)}>刪除</button></span>
-              </div>{editingRepaymentId === record.id ? <LoanRepaymentForm expense={record} existing={loanRepayments?.[record.id] ?? null} disabled={pendingAction !== null} onSave={(fields) => handleSaveRepayment(record, fields)} onSetStatus={(status) => handleRepaymentStatus(record, status)} onCancel={() => setEditingRepaymentId(null)} /> : null}
+      {recordGroups.map((group) => {
+        const dayExpense = group.items.reduce((sum, item) => sum + (item.kind === "expense" ? item.amount : 0), 0);
+        const dayIncome = group.items.reduce((sum, item) => sum + (item.kind === "income" ? item.amount : 0), 0);
+        return <section className="records-day" key={group.date}>
+          <div className="records-day-head">
+            <span>{group.label}</span>
+            <span>{[dayExpense > 0 ? `支出 ${money(dayExpense)}` : "", dayIncome > 0 ? `收入 ${money(dayIncome)}` : ""].filter(Boolean).join("・")}</span>
+          </div>
+          <div className="card records-list">
+            {group.items.map((item) => {
+              const isOpen = expandedKey === item.key;
+              return <div className="records-item" key={item.key}>
+                <button className="records-row" type="button" aria-expanded={isOpen} onClick={() => setExpandedKey(isOpen ? null : item.key)}>
+                  <span className={item.kind === "income" ? "home-recent-icon income" : "home-recent-icon"}>{item.badge}</span>
+                  <span className="home-recent-main">
+                    <span>{item.title}</span>
+                    <span className="muted">{item.meta}</span>
+                    {item.status ? <span className={`status-tag ${item.statusTone}`}>{item.status}</span> : null}
+                  </span>
+                  <strong className={item.kind === "income" ? "positive" : undefined}>{item.kind === "income" ? "+" : "−"}{money(item.amount)}</strong>
+                </button>
+                {isOpen ? <div className="records-actions">
+                  {item.kind === "income" ? <>
+                    <button className="btn secondary" type="button" disabled={pendingAction !== null} onClick={() => setEditingIncomeId(editingIncomeId === item.income.id ? null : item.income.id)}>{editingIncomeId === item.income.id ? "收合" : "修改"}</button>
+                    <button className="btn secondary danger-text" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteIncome(item.income.id)}>刪除</button>
+                  </> : <>
+                    {item.canRepay ? <button className="btn secondary" type="button" disabled={pendingAction !== null} onClick={() => setEditingRepaymentId(editingRepaymentId === item.expense.id ? null : item.expense.id)}>{editingRepaymentId === item.expense.id ? "收合" : "還款明細"}</button> : null}
+                    <button className="btn secondary danger-text" type="button" disabled={pendingAction !== null} onClick={() => handleDeleteExpense(item.expense)}>刪除</button>
+                  </>}
+                </div> : null}
+                {isOpen && item.kind === "income" && editingIncomeId === item.income.id ? <IncomeEditForm record={item.income} disabled={pendingAction !== null} onSave={(changes) => handleUpdateIncome(item.income.id, changes)} onCancel={() => setEditingIncomeId(null)} /> : null}
+                {isOpen && item.kind === "expense" && editingRepaymentId === item.expense.id ? <LoanRepaymentForm expense={item.expense} existing={loanRepayments?.[item.expense.id] ?? null} disabled={pendingAction !== null} onSave={(fields) => handleSaveRepayment(item.expense, fields)} onSetStatus={(status) => handleRepaymentStatus(item.expense, status)} onCancel={() => setEditingRepaymentId(null)} /> : null}
               </div>;
-              })}</div> : null}
-            </div>;
-          })}</div> : null}
-        </article>;
+            })}
+          </div>
+        </section>;
       })}
       </> : null}
 

@@ -196,6 +196,9 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
   const [isSaving, setIsSaving] = useState(false);
   const [isTemplateLoading, setIsTemplateLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [recordedIds, setRecordedIds] = useState<Set<string>>(() => new Set());
+  const [recordedTick, setRecordedTick] = useState(0);
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
@@ -244,6 +247,43 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
       isMounted = false;
     };
   }, [user]);
+
+  useEffect(() => {
+    if (!user || visibleItems.length === 0) return;
+    let isMounted = true;
+    const month = currentMonthString();
+    const insuranceDate = previousMonthDayForMonth(month, 24);
+
+    async function loadRecorded() {
+      try {
+        const months = Array.from(new Set([month, insuranceDate.slice(0, 7)]));
+        const records = (await Promise.all(months.map((value) => getExpenseRecordsByMonth(value)))).flat();
+        const ids = new Set<string>();
+        for (const item of visibleItems) {
+          const paymentMethod = toPaymentMethod(item);
+          const category = toExpenseCategory(item);
+          const target = toTarget(item.target, viewer);
+          const inPeriod = (date: string) => usesPreviousMonthInsuranceDate(item) ? date === insuranceDate : date.startsWith(month);
+          if (records.some((record) =>
+            inPeriod(record.date) &&
+            record.note === item.name &&
+            record.category === category &&
+            record.target === target &&
+            record.paidBy === viewer &&
+            record.paymentMethod === paymentMethod
+          )) ids.add(item.id);
+        }
+        if (isMounted) setRecordedIds(ids);
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    loadRecorded();
+    return () => {
+      isMounted = false;
+    };
+  }, [user, visibleItems, viewer, recordedTick]);
 
   const selectedItem = useMemo(() => visibleItems.find((item) => item.id === selectedId) ?? visibleItems[0], [selectedId, visibleItems]);
   const usesFixedInsuranceDate = selectedItem ? usesPreviousMonthInsuranceDate(selectedItem) : false;
@@ -360,6 +400,7 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
         createdBy: user.uid,
         loanKey: LOAN_TEMPLATE_KEYS[selectedItem.id],
       });
+      setRecordedTick((value) => value + 1);
       setMessage(`已新增：${selectedItem.name}｜${recordDate}｜${category}｜${selectedItem.paymentMethod}${selectedItem.creditCard ? `・${selectedItem.creditCard}` : ""}｜$${selectedItem.amount.toLocaleString("zh-TW")}`);
     } catch (error) {
       console.error(error);
@@ -405,70 +446,83 @@ export function RecurringExpensePanel({ viewer }: { viewer: Viewer }) {
     }
   }
 
+  const recordedCount = visibleItems.filter((item) => recordedIds.has(item.id)).length;
+  const progressPercent = visibleItems.length > 0 ? Math.round((recordedCount / visibleItems.length) * 100) : 0;
+
   return (
-    <section className="card grid">
-      <h2>固定支出</h2>
-      <p className="muted" style={{ margin: 0 }}>選擇固定支出後按「新增支出」，會正式寫入本月帳本。</p>
-      {isTemplateLoading ? <p className="muted" style={{ margin: 0 }}>正在同步固定支出模板...</p> : null}
+    <section className="grid fixed-panel">
+      <div className="fixed-progress">
+        <div className="home-bar"><span style={{ width: `${progressPercent}%` }} /></div>
+        <span>本月已記錄 {recordedCount} / {visibleItems.length}</span>
+      </div>
+      {isTemplateLoading ? <p className="muted fixed-note">正在同步固定支出模板...</p> : null}
+      {message ? <p className="muted fixed-note" role="status">{message}</p> : null}
 
-      <label className="field">
-        <span>{usesFixedInsuranceDate ? "帳單月份" : "支出日期"}</span>
-        {usesFixedInsuranceDate ? (
-          <input className="input" type="month" value={insuranceBillMonth} onChange={(event) => setInsuranceBillMonth(event.target.value)} />
-        ) : (
-          <input className="input" type="date" value={expenseDate} onChange={(event) => setExpenseDate(event.target.value)} />
-        )}
-        {usesFixedInsuranceDate ? <small className="muted">實際刷卡日固定為 {effectiveExpenseDate}，會歸入 {insuranceBillMonth} 的信用卡帳單。</small> : null}
-      </label>
-
-      <label className="field">
-        <span>選擇固定支出</span>
-        <select className="select" value={selectedItem?.id ?? ""} onChange={(event) => setSelectedId(event.target.value)}>
-          {groupedVisibleItems.map(([group, groupItems]) => <optgroup key={group} label={group}>{groupItems.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</optgroup>)}
-        </select>
-      </label>
-
-      {selectedItem ? (
-        <article className="card grid" style={{ boxShadow: "none" }}>
-          <div className="row">
-            <div>
-              <strong>{selectedItem.name}</strong>
-              <div className="muted">{selectedItem.category}・{labelForOwner(selectedItem.target, viewer)}・{selectedItem.paymentMethod}{selectedItem.creditCard ? `・${selectedItem.creditCard}` : ""}</div>
-            </div>
-            <strong>${selectedItem.amount.toLocaleString("zh-TW")}</strong>
+      {groupedVisibleItems.map(([group, groupItems]) => (
+        <div className="fixed-group" key={group}>
+          <h2 className="fixed-group-title">{group}</h2>
+          <div className="card fixed-list">
+            {groupItems.map((item) => {
+              const isOpen = expandedId === item.id && selectedItem?.id === item.id;
+              const isRecorded = recordedIds.has(item.id);
+              return <div className="fixed-item" key={item.id}>
+                <button className="fixed-row" type="button" aria-expanded={isOpen} onClick={() => { setSelectedId(item.id); setExpandedId(isOpen ? null : item.id); }}>
+                  <span className="fixed-row-main">
+                    <span className={isRecorded ? "fixed-name done" : "fixed-name"}>{item.name}</span>
+                    <span className="muted">${item.amount.toLocaleString("zh-TW")} · {item.paymentMethod}{item.creditCard ? ` ${item.creditCard}` : ""}{item.target !== "self" ? ` · ${labelForOwner(item.target, viewer)}` : ""}</span>
+                  </span>
+                  {isRecorded
+                    ? <span className="fixed-done"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>本月已記錄</span>
+                    : <span className="fixed-todo">記錄</span>}
+                </button>
+                {isOpen && selectedItem ? <div className="fixed-editor">
+                  <div className="fixed-editor-fields">
+                    <label className="field">
+                      <span>{usesFixedInsuranceDate ? "帳單月份" : "支出日期"}</span>
+                      {usesFixedInsuranceDate ? (
+                        <input className="input" type="month" value={insuranceBillMonth} onChange={(event) => setInsuranceBillMonth(event.target.value)} />
+                      ) : (
+                        <input className="input" type="date" value={expenseDate} onChange={(event) => setExpenseDate(event.target.value)} />
+                      )}
+                    </label>
+                    <label className="field">
+                      <span>金額</span>
+                      <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={amountDraft} onChange={(event) => updateSelectedAmount(event.target.value)} onBlur={saveSelectedAmount} />
+                    </label>
+                  </div>
+                  {usesFixedInsuranceDate ? <small className="muted">實際刷卡日固定為 {effectiveExpenseDate}，會歸入 {insuranceBillMonth} 的信用卡帳單。</small> : null}
+                  {selectedItem.paymentMethod === "信用卡" && selectedItem.creditCard !== "保費卡" ? (
+                    <label className="field">
+                      <span>信用卡</span>
+                      <select className="select" value={selectedItem.creditCard ?? creditCards[0]} onChange={(event) => updateSelectedCreditCard(event.target.value as CreditCardName)}>
+                        {creditCards.map((card) => <option key={card}>{card}</option>)}
+                      </select>
+                    </label>
+                  ) : null}
+                  <div className="fixed-editor-actions">
+                    {isSubscriptionItem(selectedItem) ? <button className="btn secondary danger-text" type="button" onClick={deleteSelectedSubscription}>刪除這個訂閱</button> : null}
+                    <button className="btn" type="button" onClick={importThisMonth} disabled={isSaving}>{isSaving ? "新增中..." : isRecorded ? "再新增一筆" : "新增這筆支出"}</button>
+                  </div>
+                </div> : null}
+              </div>;
+            })}
           </div>
-          <label className="field">
-            <span>金額</span>
-            <input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={amountDraft} onChange={(event) => updateSelectedAmount(event.target.value)} onBlur={saveSelectedAmount} />
-          </label>
-          {selectedItem.paymentMethod === "信用卡" && selectedItem.creditCard !== "保費卡" ? (
-            <label className="field">
-              <span>信用卡</span>
-              <select className="select" value={selectedItem.creditCard ?? creditCards[0]} onChange={(event) => updateSelectedCreditCard(event.target.value as CreditCardName)}>
-                {creditCards.map((card) => <option key={card}>{card}</option>)}
-              </select>
-            </label>
-          ) : null}
-          {isSubscriptionItem(selectedItem) ? <button className="btn secondary" type="button" onClick={deleteSelectedSubscription}>刪除這個訂閱</button> : null}
-          <button className="btn secondary" type="button" onClick={importThisMonth} disabled={isSaving}>{isSaving ? "新增中..." : "新增支出"}</button>
-        </article>
-      ) : null}
+        </div>
+      ))}
 
-      <button className="btn" type="button" onClick={() => setShowSubscriptionForm((value) => !value)}>
-        {showSubscriptionForm ? "收起新增訂閱" : "新增個人訂閱"}
+      <button className="btn secondary" type="button" onClick={() => setShowSubscriptionForm((value) => !value)}>
+        {showSubscriptionForm ? "收起新增訂閱" : "＋ 新增個人訂閱"}
       </button>
 
       {showSubscriptionForm ? (
-        <form className="card grid" style={{ boxShadow: "none" }} onSubmit={addSubscription}>
+        <form className="card grid" onSubmit={addSubscription}>
           <h3 style={{ margin: 0 }}>新增個人訂閱</h3>
           <label className="field"><span>訂閱名稱</span><input className="input" value={subscriptionName} onChange={(event) => setSubscriptionName(event.target.value)} placeholder="例如 GPT、動畫瘋" /></label>
           <label className="field"><span>金額</span><input className="input" type="number" inputMode="decimal" pattern="[0-9]*" step="1" value={subscriptionAmount} onChange={(event) => setSubscriptionAmount(event.target.value)} placeholder="例如 660" /></label>
           <label className="field"><span>信用卡</span><select className="select" value={subscriptionCard} onChange={(event) => setSubscriptionCard(event.target.value as CreditCardName)}>{creditCards.map((card) => <option key={card}>{card}</option>)}</select></label>
-          <button className="btn secondary" type="submit">儲存訂閱模板</button>
+          <button className="btn" type="submit">儲存訂閱模板</button>
         </form>
       ) : null}
-
-      {message ? <p className="muted">{message}</p> : null}
     </section>
   );
 }
