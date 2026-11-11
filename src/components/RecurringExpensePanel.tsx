@@ -95,7 +95,8 @@ const DEFAULT_ORDER = new Map(DEFAULT_ITEMS.map((item, index) => [item.id, index
 
 function templateGroup(item: RecurringItem) {
   if (isSubscriptionItem(item)) return "訂閱";
-  if (item.id === "mortgage" || item.id === "home-equity-loan" || item.id === "management-fee") return "居住";
+  if (item.id === "mortgage" || item.id === "home-equity-loan") return "貸款";
+  if (item.id === "management-fee") return "居住";
   if (item.id === "internet" || item.id.startsWith("mobile-")) return "通訊";
   if (item.category === "保險") return "保險";
   if (item.target === "junyao") return "竣堯";

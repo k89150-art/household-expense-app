@@ -599,6 +599,8 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0, view = "home" }: 
 
   return (
     <section className="home-summary grid">
+      {/* 首頁固定顯示本月；查其他月份請到「紀錄」頁 */}
+      {view === "records" ? <>
       <article className="card grid">
         <div className="month-picker">
           <button className="btn secondary" type="button" onClick={() => setSelectedMonth((value) => shiftMonth(value, -1))}>上個月</button>
@@ -619,6 +621,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0, view = "home" }: 
           <button className={scope === "all" ? "btn" : "btn secondary"} type="button" onClick={() => setScope("all")}>全部月份</button>
         </div>
       </article>
+      </> : null}
 
       {view === "home" ? <>
       <article className="card grid summary-hero">
