@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import type { ReactNode } from "react";
 import { AdvanceForm } from "@/components/AdvanceForm";
 import { AuthGate, useCurrentUser } from "@/components/AuthGate";
 import { ExpenseQuickForm } from "@/components/ExpenseQuickForm";
@@ -13,18 +14,32 @@ import { firebaseAppEnv } from "@/lib/firebase";
 import type { Viewer } from "@/lib/household";
 import { resolveMemberRole } from "@/lib/memberRoles";
 
-type Tab = "home" | "add" | "fixed" | "report";
-type AddMode = "expense" | "income" | "advance" | "fixed";
+type Tab = "home" | "records" | "add" | "report" | "fixed";
+type AddMode = "expense" | "income" | "advance";
+type NavTab = Exclude<Tab, "add">;
 
-const DAILY_QUOTES = [
-  "今天先記一筆，未來的自己會感謝你。",
-  "錢不是要管你，是要幫你選生活。",
-  "把小事記清楚，大方向就會更安定。",
-  "今天的支出，也是家的生活痕跡。",
-  "有感覺地花錢，比一直忍耐更可持續。",
-  "記帳不是約束，是把自由放到看得見的地方。",
-  "好好生活的計畫，從一筆小小的紀錄開始。",
-];
+const TAB_TITLES: Record<Tab, string> = {
+  home: "首頁",
+  records: "紀錄",
+  add: "新增",
+  report: "報表",
+  fixed: "固定支出",
+};
+
+const NAV_ICONS: Record<NavTab, ReactNode> = {
+  home: <path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />,
+  records: <><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></>,
+  report: <><path d="M4 20V10" /><path d="M10 20V4" /><path d="M16 20v-7" /><path d="M22 20H2" /></>,
+  fixed: <><path d="M17 2l4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" /></>,
+};
+
+function NavIcon({ tab }: { tab: NavTab }) {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {NAV_ICONS[tab]}
+    </svg>
+  );
+}
 
 /**
  * 登入後、任何 Firestore 讀寫之前的角色關卡：雙帳號 UID 白名單（NEXT_PUBLIC_MEMBER_ROLES）。
@@ -58,81 +73,48 @@ function MemberRoleGate() {
 function HouseholdApp({ viewer }: { viewer: Viewer }) {
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [addMode, setAddMode] = useState<AddMode>("expense");
-  const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-
-  const monthText = useMemo(() => new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "2-digit" }).format(new Date()).replace("/", " / "), []);
-  const quote = useMemo(() => DAILY_QUOTES[new Date().getDate() % DAILY_QUOTES.length], []);
-
-  function refreshRecords() {
-    setRefreshKey((value) => value + 1);
-    setActiveTab("home");
-  }
-
-  function openAdd(mode: AddMode) {
-    setAddMode(mode);
-    setActiveTab("add");
-    setIsQuickMenuOpen(false);
-  }
-
-  function openFixed() {
-    setAddMode("fixed");
-    setActiveTab("add");
-    setIsQuickMenuOpen(false);
-  }
 
   function openTab(tab: Tab) {
     setActiveTab(tab);
-    setIsQuickMenuOpen(false);
+    window.scrollTo({ top: 0 });
+  }
+
+  function refreshRecords() {
+    setRefreshKey((value) => value + 1);
+    openTab("home");
+  }
+
+  function navButton(tab: NavTab) {
+    return (
+      <button type="button" aria-current={activeTab === tab ? "page" : undefined} onClick={() => openTab(tab)}>
+        <NavIcon tab={tab} />
+        {tab === "fixed" ? "固定" : TAB_TITLES[tab]}
+      </button>
+    );
   }
 
   return (
     <main className="container">
-      <section className="cover">
-        <div className="cover-top">
-          <p className="brand-kicker">HOUSEHOLD LEDGER</p>
-          <div className="profile">{viewer === "chris" ? "阿" : "太"}</div>
-        </div>
-        <div className="cover-title">
-          <h1>一起記</h1>
-          <p>{quote}</p>
-        </div>
-        <div className="balance-line">
-          <div>
-            <span>{activeTab === "home" ? "本月家庭帳本" : activeTab === "add" ? "新增一筆紀錄" : activeTab === "fixed" ? "固定支出管理" : "月份報表"}</span>
-            <strong>{activeTab === "home" ? "首頁" : activeTab === "add" ? "新增" : activeTab === "fixed" ? "固定" : "報表"}</strong>
-          </div>
-          <div className="month-pill">{monthText}</div>
-        </div>
-      </section>
+      <header className="app-header">
+        <h1>{TAB_TITLES[activeTab]}</h1>
+      </header>
 
-      <nav className="ledger-tabs" aria-label="view tabs">
-        <button className={activeTab === "home" ? "active" : ""} type="button" onClick={() => openTab("home")}>首頁</button>
-        <button className={activeTab === "add" ? "active" : ""} type="button" onClick={() => openAdd(addMode)}>新增</button>
-        <button className={activeTab === "report" ? "active" : ""} type="button" onClick={() => openTab("report")}>報表</button>
-      </nav>
-
-      {activeTab === "home" ? <FirestoreHomeSummary viewer={viewer} refreshKey={refreshKey} /> : null}
+      {activeTab === "home" ? <FirestoreHomeSummary viewer={viewer} refreshKey={refreshKey} view="home" /> : null}
+      {activeTab === "records" ? <FirestoreHomeSummary viewer={viewer} refreshKey={refreshKey} view="records" /> : null}
 
       {activeTab === "add" ? (
         <section className="grid page-section">
           <div className="panel">
-            <div className="choice-grid">
-              <button className={addMode === "expense" ? "choice active" : "choice"} type="button" onClick={() => setAddMode("expense")}>支出</button>
-              <button className={addMode === "fixed" ? "choice active desktop-hidden-choice" : "choice desktop-hidden-choice"} type="button" onClick={openFixed}>固定</button>
-              <button className={addMode === "income" ? "choice active" : "choice"} type="button" onClick={() => setAddMode("income")}>收入</button>
-              <button className={addMode === "advance" ? "choice active" : "choice"} type="button" onClick={() => setAddMode("advance")}>代墊</button>
+            <div className="choice-grid" role="group" aria-label="紀錄類型">
+              <button className={addMode === "expense" ? "choice active" : "choice"} type="button" aria-pressed={addMode === "expense"} onClick={() => setAddMode("expense")}>支出</button>
+              <button className={addMode === "income" ? "choice active" : "choice"} type="button" aria-pressed={addMode === "income"} onClick={() => setAddMode("income")}>收入</button>
+              <button className={addMode === "advance" ? "choice active" : "choice"} type="button" aria-pressed={addMode === "advance"} onClick={() => setAddMode("advance")}>代墊</button>
             </div>
           </div>
           {addMode === "expense" ? <ExpenseQuickForm viewer={viewer} onSaved={refreshRecords} /> : null}
           {addMode === "income" ? <IncomeForm viewer={viewer} onSaved={refreshRecords} /> : null}
           {addMode === "advance" ? <AdvanceForm viewer={viewer} onSaved={refreshRecords} /> : null}
-          {addMode === "fixed" ? <RecurringExpensePanel viewer={viewer} /> : null}
-          {addMode === "expense" ? (
-            <aside className="desktop-fixed-panel">
-              <RecurringExpensePanel viewer={viewer} />
-            </aside>
-          ) : null}
         </section>
       ) : null}
 
@@ -143,21 +125,16 @@ function HouseholdApp({ viewer }: { viewer: Viewer }) {
         </section>
       ) : null}
 
-      {activeTab === "report" ? (
-        <HouseholdReport />
-      ) : null}
+      {activeTab === "report" ? <HouseholdReport /> : null}
 
-      <button className={isQuickMenuOpen ? "scrim open" : "scrim"} type="button" aria-label="關閉快速新增" onClick={() => setIsQuickMenuOpen(false)} />
-      <div className={isQuickMenuOpen ? "quick-menu open" : "quick-menu"} aria-label="快速新增">
-        <button type="button" onClick={() => openAdd("expense")}>支出</button>
-        <button type="button" onClick={() => openAdd("income")}>收入</button>
-        <button type="button" onClick={openFixed}>固定</button>
-      </div>
-
-      <nav className={isQuickMenuOpen ? "compose menu-open" : "compose"}>
-        <button data-nav="home" className={activeTab === "home" ? "active" : ""} type="button" onClick={() => openTab("home")}>首頁</button>
-        <button className="fab" type="button" aria-label="快速新增" aria-expanded={isQuickMenuOpen} onClick={() => setIsQuickMenuOpen((value) => !value)}>+</button>
-        <button data-nav="reports" className={activeTab === "report" ? "active" : ""} type="button" onClick={() => openTab("report")}>報表</button>
+      <nav className="bottom-nav" aria-label="主要導覽">
+        {navButton("home")}
+        {navButton("records")}
+        <button className="nav-add" type="button" aria-label="新增" aria-current={activeTab === "add" ? "page" : undefined} onClick={() => { setAddMode("expense"); openTab("add"); }}>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
+        </button>
+        {navButton("report")}
+        {navButton("fixed")}
       </nav>
     </main>
   );

@@ -50,7 +50,7 @@ import type { LoanRepaymentFields, LoanRepaymentRecord } from "@/types/loanRepay
 
 type Scope = "month" | "all";
 type CreditCardTab = "due" | "unbilled" | "paid";
-type Props = { viewer: Viewer; refreshKey?: number };
+type Props = { viewer: Viewer; refreshKey?: number; view?: "home" | "records" };
 type CardLine = { date: string; label: string; amount: number; kind: "expense" | "advance" | "installment" | "legacyInstallment"; sourceExpense?: ExpenseRecord };
 const CARD_PAYMENT_FEES: Partial<Record<CreditCardName, number>> = {
   中信: 10,
@@ -260,7 +260,7 @@ function getErrorCode(error: unknown) {
   return "unknown";
 }
 
-export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
+export function FirestoreHomeSummary({ viewer, refreshKey = 0, view = "home" }: Props) {
   const user = useCurrentUser();
   const [selectedMonth, setSelectedMonth] = useState(currentMonthString());
   const [scope, setScope] = useState<Scope>("month");
@@ -620,7 +620,8 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
         </div>
       </article>
 
-      <article className="card grid">
+      {view === "home" ? <>
+      <article className="card grid summary-hero">
         <h2>{scope === "month" ? "本月剩餘可用金額" : "目前月份剩餘可用金額"}</h2>
         <div className="row"><span>家庭剩餘</span><strong>{money(familyAvailableBalance)}</strong></div>
         <div className="cashflow-pair">
@@ -641,7 +642,10 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
         {isLoading ? <p className="muted">讀取中...</p> : null}
         {message ? <p className="muted">{message}</p> : null}
       </article>
+      </> : null}
 
+      {view === "records" ? <>
+      {isLoading || message ? <article className="card grid">{isLoading ? <p className="muted" style={{ margin: 0 }}>讀取中...</p> : null}{message ? <p className="muted" style={{ margin: 0 }}>{message}</p> : null}</article> : null}
       <article className="card grid">
         <button className="row" type="button" onClick={() => setShowIncomes((value) => !value)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
           <div><h2 style={{ margin: 0 }}>收入紀錄</h2><div className="muted">點一下看收入明細</div></div>
@@ -704,7 +708,9 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           })}</div> : null}
         </article>;
       })}
+      </> : null}
 
+      {view === "home" ? <>
       <article className="card grid">
         <button className="row" type="button" onClick={() => setShowCreditCards((value) => !value)} style={{ border: 0, background: "transparent", padding: 0, textAlign: "left" }}>
           <div><h2 style={{ margin: 0 }}>信用卡</h2><div className="muted">{dueCardCount > 0 ? `${dueCardCount} 張待繳` : estimatedCardCount > 0 ? `${estimatedCardCount} 張未結帳預估` : "帳單已整理"}</div></div>
@@ -862,6 +868,7 @@ export function FirestoreHomeSummary({ viewer, refreshKey = 0 }: Props) {
           </div>
         </div>)}</div> : null}
       </article> : null}
+      </> : null}
     </section>
   );
 }
