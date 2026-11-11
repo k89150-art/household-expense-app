@@ -130,3 +130,11 @@
 - 決策：家庭記帳是房貸與增貸還款的唯一輸入來源。還款明細存在 `loanRepayments/{expenseId}`，一定連結既有支出，不另外新增支出；本金、利息、手續費依銀行通知輸入，總和必須等於支出金額，程式不推算。
 - 作廢或還原只改 `status`，不刪除文件；只有刪除支出時才在同一批次刪除明細。
 - Portfolio Steward 只讀取明細：只有本金減少貸款餘額，利息與手續費不減少本金；不新增現金或支出紀錄。
+
+## D-018 2026-11 UI 改版只改畫面，不改資料與計算
+
+- 日期：2026-11-12
+- 範圍：暖米色背景＋白卡片＋綠色主色；底部五格導覽；首頁、新增（數字鍵盤）、紀錄、固定支出、報表全面改版；另含先行上線的投資功能移除（2026-11-05）。所有裝置使用手機單欄版面。
+- 決策：UI 改版不得修改 Firestore 資料結構、Rules、`src/lib` 的資料存取與計算、還款邏輯，以及 Portfolio Steward 的資料契約（`incomes`、`loanRepayments`、`integrationReaderIds`）。畫面需要的分組、週期、短名稱、已記錄判斷，一律做成程式常數或唯讀比對。
+- 統計定義：報表與首頁共用同一套現金流公式；刷卡消費不重複計入現金流；付款方式只分現金與信用卡。
+- 上線程序：開發在 `feature/ui-redesign`；以 `p4-ui-apply.ps1`（manifest 逐檔比對 blob 後 Commit）套用，以 `p4-release.ps1`（讀 `p4-release.json`：預期 main、預期 tree、允許檔案；檢查範圍、受保護路徑、金鑰掃描、TypeScript、ESLint、單元測試、正式建置）通過後，`-Deploy` 才以 fast-forward 推送 main。不使用 force，不另開 Vercel Preview，正式上線後以手機實機驗收；必要時以 Vercel Instant Rollback 退回。

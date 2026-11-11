@@ -310,3 +310,28 @@ node scripts/seed-firebase-emulator.mjs
 - Rules：成員可建立／修改明細（欄位、整數、相加、日期格式、`updatedAt == request.time`、`createdBy` 不可改；ACTIVE 時總額必須等於支出金額）；明細不能單獨刪除，只能和支出同批刪除；支出不能單獨刪除而留下明細，也不能把金額改成與有效明細不一致。整合身分可讀 `loanRepayments`（get／list），不能寫。其他集合的規則未改。
 - 測試：`tests/loanRepayment.test.mjs`（5 項）、`tests/emulator/loan-repayment-rules.test.mjs`（7 項）。
 - 正式上線前需要另行授權：依 D-013 部署 Rules；Portfolio Steward 端 Migration 0038 的套用與正式同步另案核准。
+
+## 2026-11-12 UI 改版（P4）正式上線並結案
+
+- 執行：Claude（Codex 額度用盡期間接手）。使用者以本機 PowerShell 腳本套用與上線；Claude 沒有 GitHub、Vercel、Firebase 寫入權限。
+- 基準：Codex 的 main `d11fc1c`（含 Portfolio Steward 同步第一、二階段與 R3、R4 Rules）。
+- 上線版本（GitHub main，皆為 fast-forward、未使用 force）：
+  - `dc5e61d`：Phase 1～6（`245e8e0` 外框與配色、`8f995c4` 首頁只顯示本月與貸款分組、`dc5e61d` 首頁／新增／紀錄／固定／報表）。
+  - `f256850`：手機驗收修正（手機門號每 2 個月、管理費每季、才藝班範本、居家細項移除管理費）。
+- 修改檔案只有：`src/app/globals.css`、`src/app/page.tsx`、`src/components/ExpenseQuickForm.tsx`、`FirestoreHomeSummary.tsx`、`HouseholdReport.tsx`、`RecurringExpensePanel.tsx`、`src/lib/categories.ts`（只新增畫面用的 `categoryLabel()`）。
+- 未修改：Firestore Rules、`firebase.json`、`src/lib` 其餘檔案（資料存取、計算、Firebase／白名單設定）、`src/types`、收入／代墊／還款明細表單、`package.json`、`pnpm-lock.yaml`、所有測試。Portfolio Steward 讀取的 `incomes`、`loanRepayments`、`integrationReaderIds` 契約不變。
+- 驗證：每次上線前 `p4-release.ps1` 通過——變更範圍、受保護路徑、金鑰／私人 Email 掃描、TypeScript、ESLint、單元測試 97/97、`next build`；使用者以手機在正式站驗收通過。
+- 畫面結構與規則：見 `docs/ARCHITECTURE.md` 第 1、8 節與 D-018。
+
+本機腳本（`%USERPROFILE%\Documents\Codex\`，不在 repo 內）：
+
+- `p4-ui-apply.ps1 -Bundle <資料夾>`：資料夾內 `manifest.json` 指定分支、預期 HEAD、每個檔案的原 blob／新 blob；全部相符才複製並 Commit，失敗會還原。不推送。
+- `p4-release.ps1`：讀 `p4-release.json`（預期 main、預期 tree、允許檔案），只檢查；加 `-Deploy` 並輸入 `YES` 才推送 main。
+- `p4-start-dev.ps1`／`p4-verify-dev-env.ps1`：在 `feature/ui-redesign` 啟動開發站（只連 `household-expense-dev`）。
+
+下一位 AI 接手注意：
+
+- UI 程式碼的最後版本是 `f256850`，之後只有本次交接文件的提交；`feature/ui-redesign` 保留作為紀錄。之後的新工作請從最新 main 另開分支。
+- 畫面上的「已記錄」、繳費週期、分組、分類短名稱都是畫面規則，不是資料欄位；調整時不需要（也不應該）改 Firestore。
+- 首頁固定本月；查詢其他月份在紀錄頁或報表頁。
+- `HomeSummary.tsx` 仍是未被引用的舊示範元件（含 localStorage 投資資料），可另案刪除。
