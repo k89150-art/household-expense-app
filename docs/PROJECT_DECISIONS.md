@@ -6,6 +6,7 @@
 - 決策：正式本機工作區改為 `%USERPROFILE%\OneDrive\文件\家庭記帳`，GitHub remote 為 `https://github.com/k89150-art/household-expense-app.git`。
 - 原因：集中成果並讓後續 Codex／Claude 使用同一個已驗證基準。
 - 限制：歷史封存不得在未確認前刪除；殘留的舊工作樹不是正式來源，也不得成為建置或執行依賴。
+- 更新：2026-11-18 起工作區路徑由 D-019 取代。
 
 ## D-002 正式版本基準
 
@@ -32,6 +33,7 @@
 - 指令：`pnpm install --frozen-lockfile --node-linker=hoisted --package-import-method=copy --ignore-scripts`
 - 原因：預設 isolated linker 在 OneDrive 路徑發生 stack overflow；hoisted＋copy 已完成 test、lint、typecheck、build 與 dev server 驗證，且未產生 reparse point。
 - 後續：不得為了消除 pnpm 警告而未經審查開放套件 build scripts。
+- 更新：2026-11-18 搬離 OneDrive 後的安裝方式見 D-019。
 
 ## D-006 歷史成果的復原來源
 
@@ -138,3 +140,11 @@
 - 決策：UI 改版不得修改 Firestore 資料結構、Rules、`src/lib` 的資料存取與計算、還款邏輯，以及 Portfolio Steward 的資料契約（`incomes`、`loanRepayments`、`integrationReaderIds`）。畫面需要的分組、週期、短名稱、已記錄判斷，一律做成程式常數或唯讀比對。
 - 統計定義：報表與首頁共用同一套現金流公式；刷卡消費不重複計入現金流；付款方式只分現金與信用卡。
 - 上線程序：開發在 `feature/ui-redesign`；以 `p4-ui-apply.ps1`（manifest 逐檔比對 blob 後 Commit）套用，以 `p4-release.ps1`（讀 `p4-release.json`：預期 main、預期 tree、允許檔案；檢查範圍、受保護路徑、金鑰掃描、TypeScript、ESLint、單元測試、正式建置）通過後，`-Deploy` 才以 fast-forward 推送 main。不使用 force，不另開 Vercel Preview，正式上線後以手機實機驗收；必要時以 Vercel Instant Rollback 退回。
+
+## D-019 本機工作區搬離 OneDrive
+
+- 日期：2026-11-18
+- 決策：正式本機工作區改為 `C:\Projects\Household-Expense`，取代 D-001 的 OneDrive 路徑；舊資料夾已在完整性與功能驗證通過後刪除。GitHub remote、分支、Firebase 專案、Vercel 連結均不變。
+- 依賴安裝：`pnpm install --frozen-lockfile --ignore-scripts`（預設 isolated 佈局，已在新路徑驗證），取代 D-005 的 OneDrive 時期做法。仍不得未經審查開放套件 build scripts。
+- 原因：使用者決定把開發工作區移出 OneDrive。
+- 限制：`家庭記帳-歷史開發封存`、`家庭記帳-Rules備份` 仍在 OneDrive，D-006 的復原來源不變。

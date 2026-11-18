@@ -4,7 +4,7 @@
 
 ### 正式工作區
 
-- 路徑：`%USERPROFILE%\OneDrive\文件\家庭記帳`
+- 路徑：`%USERPROFILE%\OneDrive\文件\家庭記帳`（2026-11-18 起改為 `C:\Projects\Household-Expense`，舊資料夾已刪除；見「2026-11-18 本機工作區搬離 OneDrive」）
 - 遠端：`https://github.com/k89150-art/household-expense-app.git`
 - 分支：`main`
 - 建立基準：`9f448609f786ce0d14f6bcf65b67368590005772`
@@ -49,6 +49,8 @@ B 工作樹的「值班費、衛福部津貼、年終獎金」已存在正式版
 - Git tracked files：與遠端基準一致，沒有程式碼或 Firebase 設定修改。
 
 ### OneDrive／pnpm 注意事項
+
+（以下為 OneDrive 時期紀錄；2026-11-18 搬到 `C:\Projects\Household-Expense` 後的安裝方式見文末與 D-019。）
 
 pnpm 12 的預設 isolated linker 在此 OneDrive 路徑曾發生 stack overflow；改用下列方式可完成安裝，並避免建立大量套件 junction：
 
@@ -335,3 +337,15 @@ node scripts/seed-firebase-emulator.mjs
 - 畫面上的「已記錄」、繳費週期、分組、分類短名稱都是畫面規則，不是資料欄位；調整時不需要（也不應該）改 Firestore。
 - 首頁固定本月；查詢其他月份在紀錄頁或報表頁。
 - `HomeSummary.tsx` 仍是未被引用的舊示範元件（含 localStorage 投資資料），可另案刪除。
+
+## 2026-11-18 本機工作區搬離 OneDrive
+
+- 新路徑：`C:\Projects\Household-Expense`（不在 OneDrive 同步範圍）。舊路徑 `%USERPROFILE%\OneDrive\文件\家庭記帳` 已在驗證通過後刪除，不再存在。
+- 不受影響：`%USERPROFILE%\OneDrive\文件\家庭記帳-歷史開發封存`、`%USERPROFILE%\OneDrive\文件\家庭記帳-Rules備份` 原地保留，上文引用這兩處的路徑仍有效。
+- 搬遷方式：以 Robocopy 複製原始碼、設定與 `.git`（排除 `node_modules`、`.next`）；410 個檔案逐一比對路徑、大小、SHA-256 一致；11 個分支／tag、HEAD `fcd823f`、remote 不變，`git fsck --full` 通過。
+- 依賴：在新路徑以 `pnpm install --frozen-lockfile --ignore-scripts` 重建（pnpm 預設 isolated 佈局；以 `CI=true` 避免互動提示），lockfile 未改、套件版本未變。OneDrive 時期的 stack overflow 在新路徑沒有發生。
+- 驗證：Git 完整性、TypeScript、ESLint、單元測試、Firebase Emulator 整合測試（`demo-household-expense`）、`next build`、開發站 port 3210 首頁 HTTP 200 且含「一起記」、正式網站唯讀檢查（確認為正式 Firebase 專案）全部通過；測試只使用開發設定與 demo Emulator。
+- 未變更：程式碼、Firestore Rules／Indexes、Firebase 專案、Google Authentication、Vercel 連結與環境變數、正式資料、Portfolio Steward。
+- 本機腳本：`%USERPROFILE%\Documents\Codex\` 的 `p4-start-dev.ps1`、`p4-verify-dev-env.ps1`、`p4-ui-apply.ps1`、`p4-release.ps1` 已改指向新路徑（原檔在 `p5-move-backup\`）；p3 系列與舊 p4 階段腳本已停用，仍指向舊路徑，不要再使用。
+- `AGENTS.md` 的「OneDrive 依賴安裝」段落尚未更新（為 OneDrive 時期做法）；目前請依本節與 D-019 安裝。
+- 下一位 AI 接手注意：在 Codex 請開啟新路徑；新工作請從最新 main 另開分支。
