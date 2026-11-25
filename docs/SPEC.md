@@ -1,5 +1,9 @@
 # 一起記正式版規格
 
+> **歷史文件（早期規格）**：本文件保留專案初期的產品規格與 Roadmap，內容不再更新；文末 Roadmap 各項均已完成。
+> 現行畫面、資料結構、帳務邏輯與安全規則以 [`ARCHITECTURE.md`](ARCHITECTURE.md) 與
+> [`PROJECT_DECISIONS.md`](PROJECT_DECISIONS.md) 為準，目前狀態見 [`AI_HANDOFF.md`](AI_HANDOFF.md)。（2026-11-26 標註，D-020）
+
 ## 產品定位
 
 iPhone 優先的夫妻共用家庭記帳 App。核心不是 AA 分帳，而是家庭收支、生活費轉帳、固定支出、信用卡、預付金與個人隱私支出的管理。

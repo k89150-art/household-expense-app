@@ -19,6 +19,7 @@
 - 日期：2026-10-28
 - 決策：工作收入契約與 Firebase 環境隔離 Phase 1 只封存，不合併正式版。
 - 原因：它會移除正式 Firebase fallback、要求 Emulator／環境標記並改變 build/start 前置條件，需要獨立審查與測試環境決策。
+- 後續（2026-11-26 記錄，見 D-020）：之後在 repo 內以開發分支另行實作的 Phase 1 與 Firebase 環境隔離已於 2026-11-04 以 `97af98b` 併入 main。本決策所指的歷史封存快照仍不得自動整合。
 
 ## D-004 AI 協作控制
 
@@ -33,7 +34,7 @@
 - 指令：`pnpm install --frozen-lockfile --node-linker=hoisted --package-import-method=copy --ignore-scripts`
 - 原因：預設 isolated linker 在 OneDrive 路徑發生 stack overflow；hoisted＋copy 已完成 test、lint、typecheck、build 與 dev server 驗證，且未產生 reparse point。
 - 後續：不得為了消除 pnpm 警告而未經審查開放套件 build scripts。
-- 更新：2026-11-18 搬離 OneDrive 後的安裝方式見 D-019。
+- 更新：2026-11-18 搬離 OneDrive 後的安裝方式見 D-019。本決策為歷史已停用方案。
 
 ## D-006 歷史成果的復原來源
 
@@ -100,6 +101,7 @@
 - 回滾基準：部署前備份 `家庭記帳-Rules備份\firestore.rules.prod-20261029.rules.txt`（SHA-256 `5412BE69EE1D4B824D59D4B5CCE0A06F8FAB813F20BE3170F121558F821C7E08`，內容等於 Git `965c4c3`）。
 - 決策：之後 Rules 部署一律遵守：部署前重新從 Console 備份並比對；差異只能是當次授權的修改；只用 `--only firestore:rules`；不從 GitHub main（目前仍為 `af1282f` 版本）部署。
 - 尚未完成：正式環境完整 CRUD 驗收、R3／R4、正式與開發 Firebase 環境隔離。
+- 後續（2026-11-26 記錄，見 D-020）：環境隔離已於 2026-11-04 併入 main；以 R3、R4 為名的 Rules（`0465a96`、`d11fc1c`）已進入 main，但內容與此處原規劃的欄位驗證不同，正式部署狀態未驗證。回滾基準的原始備份檔經查 NOT FOUND；`965c4c3` 轉 CRLF 可重現其 SHA-256，但不可作為目前正式環境的回滾版本，部署前仍須先從 Console 備份。
 
 ## D-014 GitHub main 同步正式 R1 Rules
 
@@ -118,6 +120,7 @@
 - 決策：`feature/phase1-income-foundation` 繼續維持獨立，不併入 main；Phase 1 程式碼需另案驗收後再整合。
 - 後續優先順序：先完成正式環境權限驗收（兩位成員的完整新增、修改、刪除與私人支出權限），再規劃 Firebase 開發／正式環境隔離；R3、R4 在環境隔離完成後再評估。
 - 文件整合：main 與開發分支的交接文件日後合併時，以開發分支版本為準（已包含 main 的 2026-10-30 紀錄與 D-014 原文）。
+- 後續（2026-11-26 記錄，見 D-020）：`feature/phase1-income-foundation` 已於 2026-11-04 隨 `97af98b` 併入 main；環境隔離同時完成。正式環境完整 CRUD 驗收仍未見紀錄。
 
 ## D-016 外部整合使用專用唯讀身分
 
@@ -125,6 +128,7 @@
 - 決策：Portfolio Steward 讀取家庭記帳時，只使用一個**不是家庭成員**的專用 Firebase 帳號；它必須列在家庭文件的 `integrationReaderIds`，Rules 只給它家庭文件與 `incomes` 的讀取權（第二階段才加入 `loanRepayments`）。成員帳號不可作為整合身分。
 - 原因：成員帳號對 11 個集合都有新增、修改、刪除權限，不適合放在另一個系統的伺服器長期使用。
 - 限制：名單只能由 Console／Admin 寫入；Rules 部署遵守 D-013；收入修改一律原地 `updateDoc`，不以刪除＋新增取代。
+- 後續（2026-11-26 記錄，見 D-020）：已以 `62b6985` 進入 main；R3（`0465a96`）再限制整合身分只能讀 `owner == 'chris'` 的收入，屬既有安全政策。正式 `integrationReaderIds` 設定與正式 Rules 部署狀態未驗證。
 
 ## D-017 房貸／增貸還款明細連結既有支出
 
@@ -132,6 +136,7 @@
 - 決策：家庭記帳是房貸與增貸還款的唯一輸入來源。還款明細存在 `loanRepayments/{expenseId}`，一定連結既有支出，不另外新增支出；本金、利息、手續費依銀行通知輸入，總和必須等於支出金額，程式不推算。
 - 作廢或還原只改 `status`，不刪除文件；只有刪除支出時才在同一批次刪除明細。
 - Portfolio Steward 只讀取明細：只有本金減少貸款餘額，利息與手續費不減少本金；不新增現金或支出紀錄。
+- 後續（2026-11-26 記錄，見 D-020）：已以 `dca7ac4` 進入 main；R4（`d11fc1c`）加入兩段式 `stage`：`PENDING_DEBIT`（待銀行扣款，只顯示、不減本金）→ `BANK_DEBITED`（依銀行通知填本金／利息／手續費後才只扣減本金，總額可與轉帳支出不同）；無 `stage` 的舊文件視為已扣款。上文「總和必須等於支出金額」適用於待扣款與舊文件。正式 Rules 部署狀態未驗證。
 
 ## D-018 2026-11 UI 改版只改畫面，不改資料與計算
 
@@ -148,3 +153,16 @@
 - 依賴安裝：`pnpm install --frozen-lockfile --ignore-scripts`（預設 isolated 佈局，已在新路徑驗證），取代 D-005 的 OneDrive 時期做法。仍不得未經審查開放套件 build scripts。
 - 原因：使用者決定把開發工作區移出 OneDrive。
 - 限制：`家庭記帳-歷史開發封存`、`家庭記帳-Rules備份` 仍在 OneDrive，D-006 的復原來源不變。
+- 後續（2026-11-26 記錄，見 D-020）：`家庭記帳-歷史開發封存` 仍在原處；`家庭記帳-Rules備份` 經查已不存在（2026-11-18 搬遷紀錄顯示當時仍保留），原因未查證。
+
+## D-020 既有實作與交接文件一致性補正
+
+- 日期：2026-11-26
+- 背景：Handoff-01 唯讀盤點發現，main 上已有的程式（Phase 1 與 Firebase 環境隔離、雙帳號 UID 白名單、Portfolio Steward 同步第一／二階段、R3、R4）在交接文件中缺少紀錄，部分舊段落仍寫「尚未完成」；P4 Hotfix 2 的名稱未對應到 commit；Rules 原始備份已不在記載位置。
+- 決策：以純文件修改讓交接文件與既有實作一致：
+  - 保留所有歷史決策、發生時間與原始原因，不刪除、不改寫；過時處只在原處追加「後續（2026-11-26）」並交叉引用。
+  - 分開記錄四種狀態：歷史狀態、現行實作（main 程式）、正式部署、使用者驗收；無法查證者一律標為未驗證，不因程式進入 main 而視為已部署或已驗收。
+  - 已結案的 P4、Hotfix 2（`f256850`）等工作只補紀錄，不重新開啟、不要求重新驗收，避免後續 AI 重啟已結案工作。
+- 範圍：只修改 `AGENTS.md`、`CLAUDE.md`、`README.md`、`docs/AI_HANDOFF.md`、`docs/PROJECT_DECISIONS.md`、`docs/ARCHITECTURE.md`、`docs/SPEC.md`。
+- 限制：本決策不引入新功能、新權限、新資料格式或新的部署政策；不修改程式、Rules、測試、腳本與設定；不寫入任何 UID、Email、API Key 或 Token。
+- 詳細：`docs/AI_HANDOFF.md`「2026-11-26 交接文件一致性補正」。

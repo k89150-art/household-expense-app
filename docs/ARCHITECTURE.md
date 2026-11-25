@@ -38,8 +38,11 @@
 
 ```text
 households/default-household
-  memberIds: Firebase Auth UID[]
+  memberIds: Firebase Auth UID[]             # 家庭成員（Rules 依此授權）
+  integrationReaderIds: Firebase Auth UID[]  # 外部整合專用唯讀身分（Portfolio Steward，見第 12 節）
 ```
+
+家庭文件（含兩個 UID 名單）客戶端一律不可建立、修改或刪除（R1，D-011），只能由 Firebase Console／Admin 管理。
 
 主要子集合：
 
@@ -54,12 +57,20 @@ households/default-household
 | `recurringExpenses` | 固定支出範本 | `name`, `category`, `amount`, `target`, `paymentMethod`, `creditCard`, `visibleFor` |
 | `privateExpenseDetails` | 私人支出文字 | `expenseId`, `ownerId`, `privateNote` |
 | `prepaidAccounts` / `prepaidSettlements` | 預付金與結算 | 依現有元件與型別 |
+| `loanRepayments` | 房貸／增貸還款明細（文件 ID＝原支出 ID，見第 12 節） | `expenseId`, `stage`, `loanKey`, `dueDate`, `paidDate`, `totalAmount`, `principal`, `interest`, `fee`, `confirmation`, `status` |
 
 所有一般子集合文件都要帶 `householdId: "default-household"`。CRUD 集中在 `src/lib/records.ts`，不要在 UI 元件任意新增另一套 Firestore 寫入方式。
 
 ## 3. 身分與隱私
 
 應用程式目前把已登入使用者映射為 `chris` 或 `wife`，用於付款人、收入擁有者、固定支出可見範圍與信用卡頁面篩選。這是應用角色，不等同 Firebase UID。
+
+角色映射只在 `src/lib/memberRoles.ts`（2026-11-04，`7db329e`、`1e9d946`）：
+
+- 依環境設定 `NEXT_PUBLIC_MEMBER_ROLES`（格式 `<UID>:chris,<UID>:wife`）判斷，只用 Firebase Auth UID，不用 Email。
+- 白名單必須剛好兩筆、一位 `chris`、一位 `wife`、UID 不重複；未設定、格式錯誤、未登入或不在白名單的帳號一律拒絕，不預設任何角色。
+- 白名單值只放在各環境設定（正式站為 Vercel Production 環境變數，開發為本機 `.env.local`），不進 Git；各 Firebase 專案的 UID 不同。
+- 這只決定畫面角色；資料存取仍由 Firestore Rules 依 `memberIds` 在伺服器端強制。
 
 私人支出採雙文件：
 
@@ -165,7 +176,19 @@ schedule[] = { billMonth, installmentNo, amount }
 
 ## 10. 安全規則與部署
 
-`firebase/firestore.rules` 以父文件 `memberIds` 驗證家庭成員，並確認新舊文件的 `householdId`。私人明細另驗證 `ownerId`。
+`firebase/firestore.rules` 以父文件 `memberIds` 驗證家庭成員，並確認新舊文件的 `householdId`。私人明細另驗證 `ownerId`。外部整合身分與 `loanRepayments` 的規則見第 12 節。
+
+### Firebase 環境隔離（2026-11-04 併入 main，`97af98b`）
+
+`src/lib/firebase.ts` 只透過 `src/lib/firebaseConfig.ts` 的 `initializeValidatedFirebaseApp()` 初始化，設定不合法一律丟出錯誤停止（fail-closed），不會 fallback 到正式設定（`eaaa9b3` P3-C1）。
+
+| `NEXT_PUBLIC_APP_ENV` | 允許的 Firebase 專案 | 其他限制 |
+| --- | --- | --- |
+| `production` | `household-expense-app-8102d` | 專案編號必須屬於正式專案；不可設定 Emulator |
+| `development`／`preview` | `household-expense-dev` | 任何欄位不得指向正式專案；不得使用正式專案的 Sender ID／App ID／API Key（以指紋比對，`c4da2be` P3-C2）；不可用 demo 專案或 Emulator |
+| `emulator` | `demo-household-expense` | 必須明確設定 loopback Emulator host（Auth `127.0.0.1:9099`、Firestore `127.0.0.1:8080`） |
+
+另檢查 `authDomain`、`storageBucket` 與 `projectId` 一致、`appId` 與 `messagingSenderId` 屬於同一專案。`scripts/check-deployed-project.mjs` 可唯讀檢查建置產物或網站內嵌的 Project ID（`6166791` P1）。角色白名單見第 3 節。
 
 Vercel 與 Firestore 是兩個部署面：
 
@@ -187,4 +210,30 @@ Vercel 與 Firestore 是兩個部署面：
 6. 最後一期繳完後，歷史帳單仍保留明細。
 
 代墊修改至少涵蓋跨月收回與取消收回。UI 修改至少檢查窄手機、一般手機與桌面寬度，並確認底部導覽沒有遮住內容。
+
+## 12. 外部整合（Portfolio Steward）與還款明細
+
+本節描述 main 上的程式與 Rules（同步第一階段 `62b6985`、第二階段 `dca7ac4`、R3 `0465a96`、R4 `d11fc1c`）。正式 Firebase 目前部署的 Rules 版本與正式 `integrationReaderIds` 設定**尚未驗證**；端到端正式驗收亦未記錄。
+
+### 資料契約（D-016、D-017，不可擅自變更）
+
+- 家庭記帳記錄薪資／工作收入後，Portfolio Steward 只唯讀同步顯示，**不自動增加投資現金**。
+- 家庭記帳記錄房貸／增貸實際還款後，Portfolio Steward **只依本金**減少對應債務餘額；利息與手續費不減少本金，也不新增現金或支出紀錄。
+- 收入修改一律原地 `updateDoc`（`updateIncomeRecord`），不以刪除＋新增取代，以維持同步的文件 ID。
+
+### 整合身分權限（`firebase/firestore.rules`）
+
+- 整合身分＝家庭文件 `integrationReaderIds` 中、且**不在** `memberIds` 的 UID（`isDedicatedReader`）。名單只能由 Console／Admin 寫入。
+- 可讀：家庭文件（get）、`incomes`（get／list）、`loanRepayments`（get／list）。沒有任何寫入權，也不能讀其他集合。
+- R3：`incomes` 只限 `owner == 'chris'` 的收入；其他收入一律拒絕，查詢必須帶 `owner == 'chris'` 條件。這是既有安全政策，不得擅自擴張或縮減。
+
+### `loanRepayments` 還款明細
+
+- 路徑 `households/{householdId}/loanRepayments/{expenseId}`，文件 ID 等於原支出 ID，一筆支出最多一筆明細，不另外新增支出。型別在 `src/types/loanRepayment.ts`，純驗證在 `src/lib/loanRepayment.ts`，表單 `LoanRepaymentForm`。
+- `loanKey`：`ORIGINAL_MORTGAGE`（原房貸）／`TOP_UP_LOAN`（房屋增貸）；`status`：`ACTIVE`／`VOID`（作廢或還原只改狀態，不刪除）；金額為新台幣整數。
+- R4 兩段式（`stage`）：
+  1. `PENDING_DEBIT`（待銀行扣款）：只有貸款別、預定扣款日與金額；有效時總額必須等於該支出金額，不可有本金／利息／實際扣款日。Portfolio Steward 只顯示、不減少本金。
+  2. `BANK_DEBITED`（銀行已扣款）：依銀行通知填實際扣款日、本金、利息、手續費與 `confirmation`（`BANK_CONFIRMED`／`OWNER_CONFIRMED`），本金＋利息＋手續費＝總額（銀行實際扣款，可與當初轉帳支出金額不同，支出本身不改）。此時 Portfolio Steward 才只扣減本金。
+  3. 沒有 `stage` 的舊文件視為已扣款，維持「總額＝支出金額」的舊規則。
+- Rules 另保證：`createdBy` 不可改、`updatedAt == request.time`；明細只能和原支出同批刪除；支出不能單獨刪除而留下明細；有效的待扣款（及舊文件）明細須與支出金額一致。
 

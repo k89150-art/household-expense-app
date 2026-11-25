@@ -25,14 +25,27 @@
 
 ## 常用指令
 
+現行工作區：`C:\Projects\Household-Expense`（D-019）。依賴以 `pnpm-lock.yaml` 鎖定，安裝請用：
+
 ```bash
-npm install
+pnpm install --frozen-lockfile --ignore-scripts
+```
+
+依賴安裝後，`package.json` scripts 可用 `npm run` 執行（只執行 scripts，不安裝套件）：
+
+```bash
 npm run dev
 npm run lint
 npm run build
+npm run test
+npm run test:emulator   # Firebase Emulator（demo-household-expense），需要 Java 21
 ```
 
+Windows 上也可直接執行 `node_modules\.bin` 內的工具，見 `AGENTS.md`「驗證要求」。
+
 環境變數由 `.env.local` 提供，欄位範本在 `.env.example`。不得提交金鑰或私人設定。
+Firebase 設定缺漏、格式錯誤或混用正式／開發設定時，App 會 fail-closed 停止初始化，不會改用正式設定
+（`src/lib/firebaseConfig.ts`，見 `docs/ARCHITECTURE.md` 第 10 節）。
 
 ## 不可破壞的帳務規則
 
@@ -57,6 +70,9 @@ npm run build
 - `privateExpenseDetails.ownerId` 必須是 Firebase Auth UID，不是 `chris`／`wife` 角色字串。
 - Firestore Rules 位於 `firebase/firestore.rules`。除非需求明確要求，不得改為只要登入就能讀寫。
 - 不得在前端加入管理員金鑰、Service Account 或繞過 Rules 的程式。
+- 畫面角色只由 `src/lib/memberRoles.ts` 依 `NEXT_PUBLIC_MEMBER_ROLES` 雙帳號 UID 白名單判斷（剛好一位 chris、一位 wife）；
+  未設定、格式錯誤或不在白名單的帳號一律拒絕，不得預設任何角色。白名單值只放在各環境設定，不得寫入程式或文件。
+- 外部整合（Portfolio Steward）只用家庭文件 `integrationReaderIds` 中的專用唯讀身分；不得擴張或縮減其讀取範圍（D-016、R3）。
 
 ## 主要程式位置
 
@@ -69,6 +85,9 @@ npm run build
 - `src/lib/records.ts`：Firestore 型別與 CRUD
 - `src/lib/cardBilling.ts`：帳單區間、帳單月份與分期推進
 - `src/lib/advanceCashFlow.ts`：代墊收回現金流
+- `src/lib/firebase.ts`、`src/lib/firebaseConfig.ts`：Firebase 初始化與正式／開發／Emulator 環境驗證
+- `src/lib/memberRoles.ts`：雙帳號 UID 白名單與角色判斷
+- `src/lib/loanRepayment.ts`、`src/types/loanRepayment.ts`、`src/components/LoanRepaymentForm.tsx`：房貸／增貸兩段式還款明細
 - `firebase/firestore.rules`：資料存取規則
 
 ## 完成條件

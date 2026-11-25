@@ -17,8 +17,9 @@
 
 ## 驗證要求
 
-依變更範圍執行現有驗證。在 Windows／OneDrive 工作區優先直接執行專案內工具，
-避免 pnpm 12 的 pre-run dependency verification 再次觸發 stack overflow：
+依變更範圍執行現有驗證。現行工作區為 `C:\Projects\Household-Expense`（D-019）。優先直接執行專案內工具，
+不經 `pnpm <script>`，避免 pnpm 的 pre-run dependency verification 自動觸發安裝
+（OneDrive 時期曾因此發生 stack overflow；見 D-005，已停用）：
 
 ```powershell
 node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test tests/*.test.mjs
@@ -26,6 +27,11 @@ node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test tests/*.test.mjs
 .\node_modules\.bin\tsc.cmd --noEmit
 .\node_modules\.bin\next.cmd build
 ```
+
+上述指令與 `package.json` 的 `test`、`lint`、`build` scripts 相同；依賴已安裝時也可用
+`npm run test`、`npm run lint`、`npm run build` 執行（`npm run` 只執行 scripts，不安裝套件）。
+Firebase Emulator 整合測試為 `npm run test:emulator`（固定 `demo-household-expense`，需要 Java 21），
+指令細節見 `docs/AI_HANDOFF.md`「Phase 1 階段 3」。
 
 若某項無法執行，必須在交接紀錄中寫明原因，不可把「未執行」回報成通過。
 UI 修改需要檢查手機與桌面；信用卡、分期、代墊與報表修改需要檢查跨月份案例。
@@ -39,12 +45,21 @@ UI 修改需要檢查手機與桌面；信用卡、分期、代墊與報表修�
 - 不得把 `.env*`、憑證、Token 或使用者資料提交到 Git。
 - 不得自動整合 `家庭記帳-歷史開發封存` 中的 Phase 1；必須另案審查。
 
-## OneDrive 依賴安裝
+## 依賴安裝
 
-在 OneDrive 工作區需要重建依賴時，使用已驗證的安裝方式：
+專案以 `pnpm-lock.yaml` 鎖定版本（repo 沒有 `package-lock.json`，不要用 `npm install` 重建依賴）。
+現行工作區 `C:\Projects\Household-Expense` 使用 D-019 已驗證的方式：
+
+```bash
+pnpm install --frozen-lockfile --ignore-scripts
+```
+
+不得未經審查開放第三方安裝 scripts，也不得提交 `node_modules` 或 `.next`。
+
+### 歷史：OneDrive 依賴安裝（已停用）
+
+以下為 2026-10-28～2026-11-18 OneDrive 工作區時期（D-005）的做法，搬離 OneDrive 後已由 D-019 取代，僅保留作為紀錄：
 
 ```bash
 pnpm install --frozen-lockfile --node-linker=hoisted --package-import-method=copy --ignore-scripts
 ```
-
-不得未經審查開放第三方安裝 scripts，也不得提交 `node_modules` 或 `.next`。

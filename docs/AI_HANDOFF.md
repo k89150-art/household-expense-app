@@ -20,7 +20,7 @@
 
 ### 尚未整合
 
-`C-2026-07-01-phase1` 包含工作收入契約、收入型別、純函式驗證、Firebase 環境隔離、Emulator 初始化與測試。這些成果刻意沒有合併到正式 `main`，原因是它改變 Firebase 啟動與部署條件，必須另案確認測試／正式環境策略。
+`C-2026-07-01-phase1` 包含工作收入契約、收入型別、純函式驗證、Firebase 環境隔離、Emulator 初始化與測試。這些成果刻意沒有合併到正式 `main`，原因是它改變 Firebase 啟動與部署條件，必須另案確認測試／正式環境策略。（2026-11-26 後續：封存快照本身仍不得自動整合；之後在 repo 內重新實作的 Phase 1 與環境隔離已於 2026-11-04 經 `97af98b` 併入 main，見「2026-11-26 交接文件一致性補正」。）
 
 B 工作樹的「值班費、衛福部津貼、年終獎金」已存在正式版，不需要從舊 patch 再套用。
 
@@ -220,7 +220,7 @@ node scripts/seed-firebase-emulator.mjs
 - Firebase 專案：`household-expense-app-8102d`；Firestore 資料庫：`(default)`。
 - Firebase CLI：15.34.2；指令只使用 `--only firestore:rules`，CLI 顯示 Deploy complete。
 - 部署內容：正式 Rules（Git `965c4c3`）加上 R1。差異只有 `households/{householdId}`：成員可讀，客戶端不可 create／update／delete。未導入 `existingBelongsToHousehold()`。
-- 部署前回滾備份：`%USERPROFILE%\OneDrive\文件\家庭記帳-Rules備份\firestore.rules.prod-20261029.rules.txt`，SHA-256 `5412BE69EE1D4B824D59D4B5CCE0A06F8FAB813F20BE3170F121558F821C7E08`（Claude 已重新計算並確認一致）；內容與 Git `965c4c3` 相同。
+- 部署前回滾備份：`%USERPROFILE%\OneDrive\文件\家庭記帳-Rules備份\firestore.rules.prod-20261029.rules.txt`，SHA-256 `5412BE69EE1D4B824D59D4B5CCE0A06F8FAB813F20BE3170F121558F821C7E08`（Claude 已重新計算並確認一致）；內容與 Git `965c4c3` 相同。（2026-11-26 後續：原始備份檔經查 NOT FOUND，見「2026-11-26 交接文件一致性補正」。）
 - 部署前本機驗證（使用者執行）：單元測試 29/29、Firebase Emulator 測試 37/37 通過。
 
 部署後狀態：
@@ -238,7 +238,7 @@ node scripts/seed-firebase-emulator.mjs
 - 正式站部署產物實際使用的 Project ID 尚未以產物檢查驗證；目前依程式預設值與 Vercel 無環境變數推定為 `household-expense-app-8102d`。
 - R3（新建立資料的欄位驗證）、R4（修改時的欄位驗證）尚未開始；M2、L1–L5 仍未處理。
 - `af1282f` 的 `existingBelongsToHousehold()` 限制是否採用，尚待另案評估（見 D-012）。
-- Firebase 正式／開發環境隔離尚未完成：`src/lib/firebase.ts` 仍以正式設定為預設值，App 無法連接 Emulator；歷史封存的 Phase 1 環境隔離方案未整合。
+- Firebase 正式／開發環境隔離尚未完成：`src/lib/firebase.ts` 仍以正式設定為預設值，App 無法連接 Emulator；歷史封存的 Phase 1 環境隔離方案未整合。（2026-11-26 後續：環境隔離已於 2026-11-04 併入 main，見「2026-11-26 交接文件一致性補正」。）
 
 下一位 AI 接手注意：
 
@@ -286,8 +286,8 @@ node scripts/seed-firebase-emulator.mjs
 尚未完成：
 
 - 正式環境完整 CRUD 權限驗收尚未完成（目前只確認讀取正常）：收入、支出、私人支出、固定支出模板、代墊、刷卡繳款的新增、修改、刪除，兩位成員各自驗收，以及 Console 規則模擬器紀錄。
-- Firebase 開發／正式環境隔離尚未開始：`src/lib/firebase.ts` 仍以正式設定為預設值，App 無法連接 Emulator。
-- R3（新建立資料的欄位驗證）、R4（修改時的欄位驗證）尚未開始；M2、L1–L5 仍未處理；`af1282f` 的 `existingBelongsToHousehold()` 是否採用仍待另案評估。
+- Firebase 開發／正式環境隔離尚未開始：`src/lib/firebase.ts` 仍以正式設定為預設值，App 無法連接 Emulator。（2026-11-26 後續：已於 2026-11-04 併入 main。）
+- R3（新建立資料的欄位驗證）、R4（修改時的欄位驗證）尚未開始；M2、L1–L5 仍未處理；`af1282f` 的 `existingBelongsToHousehold()` 是否採用仍待另案評估。（2026-11-26 後續：之後實際以「R3」「R4」為名提交的是 `0465a96`（整合身分只能讀 chris 的收入）與 `d11fc1c`（還款明細兩段式），與這裡原規劃的全集合欄位驗證不同；M2、L1–L5 與 `existingBelongsToHousehold()` 的處理狀態未另行記錄，視為仍待評估。）
 - main 上的交接文件仍保留「同步分支尚未 push」的舊敘述；之後整合 main 與開發分支的文件時一併更新（見 D-015）。
 
 下一位 AI 接手注意：
@@ -297,7 +297,7 @@ node scripts/seed-firebase-emulator.mjs
 
 ## 2026-11-05 Portfolio Steward 同步第一階段（本機分支，未部署）
 
-- 分支：`feature/household-sync-phase1`（從 main `7c7e36a` 建立）；只在本機與 Emulator 驗證，**未部署 Rules、未 push、未部署網站**。
+- 分支：`feature/household-sync-phase1`（從 main `7c7e36a` 建立）；只在本機與 Emulator 驗證，**未部署 Rules、未 push、未部署網站**。（2026-11-26 後續：已以 `62b6985`（2026-11-10）進入 main；正式 Rules 部署與正式整合帳號設定未驗證，見「2026-11-26 交接文件一致性補正」。）
 - 收入原地修改：`src/lib/incomeEdit.ts`（純函式驗證，只寫有變更的欄位）、`updateIncomeRecord`（`updateDoc`，保留文件 ID、owner、householdId、createdBy；清除備註用 `deleteField`）、收入列表「修改」按鈕與 `IncomeEditForm`。
 - 外部唯讀整合身分：Rules 新增 `isDedicatedReader`／`isIntegrationReader`。家庭文件的 `integrationReaderIds` 名單中的 UID（且不是成員）只能讀家庭文件與 `incomes`（get／list），沒有任何寫入或其他集合權限。名單只能由 Console／Admin 寫入（客戶端不可寫家庭文件，R1 不變）。成員與其他集合的既有規則完全未改。
 - Emulator：seed 新增虛構 `integration.reader@example.test` 與 `integrationReaderIds`；新增 `tests/emulator/integration-reader.test.mjs`（9 項）與 `tests/incomeEdit.test.mjs`（5 項）。
@@ -305,7 +305,7 @@ node scripts/seed-firebase-emulator.mjs
 
 ## 2026-11-05 Portfolio Steward 同步第二階段：房貸／增貸還款明細（本機分支，未部署）
 
-- 分支：`feature/household-sync-phase2`（接在第一階段之後）；只在本機與 Emulator 驗證，**未部署 Rules、未 push、未部署網站**。
+- 分支：`feature/household-sync-phase2`（接在第一階段之後）；只在本機與 Emulator 驗證，**未部署 Rules、未 push、未部署網站**。（2026-11-26 後續：已以 `dca7ac4`（2026-11-10）進入 main，之後 R4 `d11fc1c` 加入兩段式 `stage`；正式 Rules 部署狀態未驗證。）
 - 資料：`households/{householdId}/loanRepayments/{expenseId}`，文件 ID 等於原支出 ID（一筆支出最多一筆明細，不新增支出）。欄位：`householdId`、`expenseId`、`loanKey`（`ORIGINAL_MORTGAGE`／`TOP_UP_LOAN`）、`dueDate`、`paidDate`、`totalAmount`、`principal`、`interest`、`fee`（新台幣整數，本金＋利息＋手續費＝總額＝支出金額）、`confirmation`、`status`（`ACTIVE`／`VOID`）、`createdBy`、`createdAt`、`updatedAt`。型別在 `src/types/loanRepayment.ts`，純驗證在 `src/lib/loanRepayment.ts`（不推算本金或利息）。
 - 畫面：支出列表中備註含「房貸」或「增貸」的支出（或已有明細的支出）出現「還款明細」按鈕，可補登、轉換舊支出、修改、作廢、還原（`LoanRepaymentForm`）。私人支出不顯示。讀不到明細（例如 Rules 尚未部署）時只隱藏按鈕，其他功能不受影響。
 - 刪除支出：`deleteExpenseRecord` 在同一批次一併刪除明細。
@@ -319,7 +319,7 @@ node scripts/seed-firebase-emulator.mjs
 - 基準：Codex 的 main `d11fc1c`（含 Portfolio Steward 同步第一、二階段與 R3、R4 Rules）。
 - 上線版本（GitHub main，皆為 fast-forward、未使用 force）：
   - `dc5e61d`：Phase 1～6（`245e8e0` 外框與配色、`8f995c4` 首頁只顯示本月與貸款分組、`dc5e61d` 首頁／新增／紀錄／固定／報表）。
-  - `f256850`：手機驗收修正（手機門號每 2 個月、管理費每季、才藝班範本、居家細項移除管理費）。
+  - `f256850`：手機驗收修正（手機門號每 2 個月、管理費每季、才藝班範本、居家細項移除管理費）。即歷史階段名稱「P4 Hotfix 2」（2026-11-26 查證，見「2026-11-26 交接文件一致性補正」）。
 - 修改檔案只有：`src/app/globals.css`、`src/app/page.tsx`、`src/components/ExpenseQuickForm.tsx`、`FirestoreHomeSummary.tsx`、`HouseholdReport.tsx`、`RecurringExpensePanel.tsx`、`src/lib/categories.ts`（只新增畫面用的 `categoryLabel()`）。
 - 未修改：Firestore Rules、`firebase.json`、`src/lib` 其餘檔案（資料存取、計算、Firebase／白名單設定）、`src/types`、收入／代墊／還款明細表單、`package.json`、`pnpm-lock.yaml`、所有測試。Portfolio Steward 讀取的 `incomes`、`loanRepayments`、`integrationReaderIds` 契約不變。
 - 驗證：每次上線前 `p4-release.ps1` 通過——變更範圍、受保護路徑、金鑰／私人 Email 掃描、TypeScript、ESLint、單元測試 97/97、`next build`；使用者以手機在正式站驗收通過。
@@ -341,11 +341,93 @@ node scripts/seed-firebase-emulator.mjs
 ## 2026-11-18 本機工作區搬離 OneDrive
 
 - 新路徑：`C:\Projects\Household-Expense`（不在 OneDrive 同步範圍）。舊路徑 `%USERPROFILE%\OneDrive\文件\家庭記帳` 已在驗證通過後刪除，不再存在。
-- 不受影響：`%USERPROFILE%\OneDrive\文件\家庭記帳-歷史開發封存`、`%USERPROFILE%\OneDrive\文件\家庭記帳-Rules備份` 原地保留，上文引用這兩處的路徑仍有效。
+- 不受影響：`%USERPROFILE%\OneDrive\文件\家庭記帳-歷史開發封存`、`%USERPROFILE%\OneDrive\文件\家庭記帳-Rules備份` 原地保留，上文引用這兩處的路徑仍有效。（2026-11-26 後續：`家庭記帳-Rules備份` 經查已不存在，見「2026-11-26 交接文件一致性補正」。）
 - 搬遷方式：以 Robocopy 複製原始碼、設定與 `.git`（排除 `node_modules`、`.next`）；410 個檔案逐一比對路徑、大小、SHA-256 一致；11 個分支／tag、HEAD `fcd823f`、remote 不變，`git fsck --full` 通過。
 - 依賴：在新路徑以 `pnpm install --frozen-lockfile --ignore-scripts` 重建（pnpm 預設 isolated 佈局；以 `CI=true` 避免互動提示），lockfile 未改、套件版本未變。OneDrive 時期的 stack overflow 在新路徑沒有發生。
 - 驗證：Git 完整性、TypeScript、ESLint、單元測試、Firebase Emulator 整合測試（`demo-household-expense`）、`next build`、開發站 port 3210 首頁 HTTP 200 且含「一起記」、正式網站唯讀檢查（確認為正式 Firebase 專案）全部通過；測試只使用開發設定與 demo Emulator。
 - 未變更：程式碼、Firestore Rules／Indexes、Firebase 專案、Google Authentication、Vercel 連結與環境變數、正式資料、Portfolio Steward。
 - 本機腳本：`%USERPROFILE%\Documents\Codex\` 的 `p4-start-dev.ps1`、`p4-verify-dev-env.ps1`、`p4-ui-apply.ps1`、`p4-release.ps1` 已改指向新路徑（原檔在 `p5-move-backup\`）；p3 系列與舊 p4 階段腳本已停用，仍指向舊路徑，不要再使用。
-- `AGENTS.md` 的「OneDrive 依賴安裝」段落尚未更新（為 OneDrive 時期做法）；目前請依本節與 D-019 安裝。
+- `AGENTS.md` 的「OneDrive 依賴安裝」段落尚未更新（為 OneDrive 時期做法）；目前請依本節與 D-019 安裝。（2026-11-26 後續：已更新，舊做法改列為歷史。）
 - 下一位 AI 接手注意：在 Codex 請開啟新路徑；新工作請從最新 main 另開分支。
+
+## 2026-11-26 交接文件一致性補正（D-020）
+
+- 執行：Claude（Handoff-01 唯讀盤點與 Handoff-02 文件補正，ChatGPT 主審）。分支 `docs/handoff-consistency`，從 main `a64c5d6` 建立；只修改文件，未 push、未合併、未部署。
+- 目的：把文件補到與 main 上既有程式一致。本節只記錄既有事實，不新增功能、權限、資料格式或部署政策；以上各節的歷史原文保留，只在原處追加「2026-11-26 後續」。
+- 狀態用語：「main」＝程式已在 GitHub main；「正式部署」＝已部署到正式 Vercel／Firebase；「使用者驗收」＝使用者實際操作確認。三者分開記錄，未查證者標為未驗證。
+
+### 版本基準（2026-11-26 直接驗證）
+
+- 工作區 `C:\Projects\Household-Expense`；本機 main、GitHub main（`git ls-remote`）、`feature/ui-redesign` 均為 `a64c5d6ea4490fac2ed5b2ca1ae44264139f01b6`，工作樹乾淨。
+- 本機分支 `chore/ai-handoff-docs`、`chore/sync-r1-rules`、`feature/phase1-income-foundation`、`feature/firebase-env-isolation`、`integrate/production-20261104` 皆已包含在 main。
+
+### Phase 1 與 Firebase 環境隔離、雙帳號 UID 白名單（main）
+
+- 2026-11-04 以 `97af98b`（Merge `feature/firebase-env-isolation` into `integrate/production-20261104`）併入 main；包含 Phase 1 階段 1～4（收入型別、工作收入純函式、Emulator 測試、R1 Rules）與下列環境隔離 commit。上文 2026-10-28～10-30 各節「Phase 1 不併入 main」「環境隔離尚未完成」均為當時狀態。
+  - `6166791`（P1）：`src/lib/firebaseConfig.ts` 環境設定驗證器與 `scripts/check-deployed-project.mjs` 產物檢查。
+  - `eaaa9b3`（P3-C1）：`src/lib/firebase.ts` 改為 fail-closed 初始化，設定錯誤即停止，不 fallback 正式設定。
+  - `c4da2be`（P3-C2）：拒絕混用正式／開發的 Sender ID、App ID、API Key（API Key 只存指紋）。
+  - `7db329e`（P3-C3）、`1e9d946`：`src/lib/memberRoles.ts` 依 `NEXT_PUBLIC_MEMBER_ROLES` 雙帳號白名單明確判斷 chris／wife；未設定、格式錯誤或不在白名單一律拒絕，不給預設角色。
+- 環境對應：production → `household-expense-app-8102d`；development／preview → `household-expense-dev`；emulator → `demo-household-expense`（loopback）。規則見 `docs/ARCHITECTURE.md` 第 3、10 節。
+- 白名單實際值只在各環境設定，未寫入任何文件。
+- 正式部署：D-019 記載 2026-11-18 正式網站唯讀檢查確認使用正式 Firebase 專案；Vercel Production 目前 commit 與環境變數內容本次未驗證。
+
+### Portfolio Steward 同步第一、二階段與 R3、R4（main）
+
+| Commit | 日期 | 內容 |
+| --- | --- | --- |
+| `62b6985` | 2026-11-10 | 同步第一階段：收入原地修改、`integrationReaderIds` 專用唯讀身分 Rules |
+| `dca7ac4` | 2026-11-10 | 同步第二階段：`loanRepayments` 還款明細連結既有支出 |
+| `f83503d` | 2026-11-10 | 手機版 UI 修正（還款明細表單等） |
+| `0465a96` | 2026-11-10 | R3：整合身分只能讀 `owner == 'chris'` 的收入 |
+| `d11fc1c` | 2026-11-11 | R4：還款明細兩段式（`PENDING_DEBIT` → `BANK_DEBITED`） |
+
+- 資料契約不變（D-016、D-017）：工作收入唯讀同步、不自動增加投資現金；只有銀行已扣款明細的本金減少債務，利息與手續費不減債；整合身分只讀不寫。細節見 `docs/ARCHITECTURE.md` 第 12 節。
+- 上文 2026-11-05 兩節標題的「本機分支，未部署」為當時狀態；日期以 commit 為準是 2026-11-10。
+- 名稱說明：這裡的 R3、R4 與 2026-10-29／10-30 各節原規劃的「R3／R4 欄位驗證」不同；M2、L1–L5 處理狀態未另行記錄。
+- **未驗證**：正式 Firebase 目前的 Rules 是否為 `d11fc1c` 版本；正式 `integrationReaderIds` 是否已設定；Portfolio Steward 與正式資料的端到端驗收。程式進入 main 不代表上述已完成。
+
+### P4 Hotfix 2
+
+- `f25685092f93036c691440612c9120cbb14b89e6`（parent `dc5e61d`）即歷史階段名稱「P4 Hotfix 2」。證據：`C:\Projects\_maintenance-history\Household-Expense\p4-ui-hotfix2\manifest.json` 的 `expectedHead` 為 `dc5e61d`，兩個檔案的新 blob（`ExpenseQuickForm.tsx` `8c364a8`、`RecurringExpensePanel.tsx` `a90253c`）與 `f256850` 完全一致；`git diff f256850^ f256850` 只改這兩個檔案。
+- 內容：
+  1. 手機門號每 2 個月一期：`RecurringExpensePanel.tsx` 的 `CYCLE_MONTHS`（`mobile-chris`、`mobile-wife` = 2）、`cycleMonths()`、`cycleLabel()`，「已記錄」判斷涵蓋整個週期。
+  2. 管理費每季（`management-fee` = 3），統一由固定支出記錄：`ExpenseQuickForm.tsx` 的 `HOME_FEE_OPTIONS` 移除居家細項「管理費」。
+  3. 才藝班範本：`isTalentItem()`、`addTalentClass()`（`才藝班：名稱`、category `才藝班`、對象竣堯、兩人可見、可刪除），記錄時歸「學費」；沿用既有 `recurringExpenses` 範本機制，資料結構不變。
+- 使用者手機實機驗收：依上文「2026-11-12 UI 改版（P4）」記載已通過。P4 與 Hotfix 2 已結案，不重新開啟或重新驗收。
+- `f256850..a64c5d6` 只有 `fcd823f`、`a64c5d6` 兩個 commit，僅修改 `docs/AI_HANDOFF.md`、`docs/ARCHITECTURE.md`、`docs/PROJECT_DECISIONS.md`。
+
+### Firestore Rules 歷史備份狀態
+
+- D-013 記載的原始 Console 備份 `家庭記帳-Rules備份\firestore.rules.prod-20261029.rules.txt`：**NOT FOUND**（查找範圍：`C:\Projects\`、`Documents\Codex`、`p5-move-backup`、`家庭記帳-歷史開發封存`、`OneDrive\文件`）。
+- 曾經存在：`_maintenance-history\Household-Expense\p5-move-delete.txt`（2026-11-18）記錄刪除舊工作區時「保留：家庭記帳-Rules備份」，`p5-move-inventory.txt` 也列出該資料夾。消失時間與原因無法查證。
+- `git show 965c4c3:firebase/firestore.rules` 轉為 CRLF 換行後，SHA-256 等於 D-013 記錄的 `5412BE69…F821C7E08`，可重現當時備份內容；但這不代表原始 Console 備份檔仍存在。
+- 該版本是 R1 之前的歷史正式 Rules，**不可視為目前 Production 的安全回滾版本**。未來任何 Rules 修改前，必須先從 Firebase Console 取得當時正式 Rules 的備份並比對（D-013 程序不變）。
+- 封存 A／B／C 快照內的 `firestore.rules` 都是從未部署的 `af1282f` 版本（Git 副本，不是 Console 備份），不可用於回滾。
+
+### 腳本與歷史交付位置
+
+- 現行五個 P4 工具仍在 `%USERPROFILE%\Documents\Codex\`：`p4-ui-apply.ps1`、`p4-release.ps1`、`p4-release.json`、`p4-start-dev.ps1`、`p4-verify-dev-env.ps1`；四支 `.ps1` 的 `$Repo` 已是 `C:\Projects\Household-Expense`。
+- 歷史 bundle（`p4-ui-phase1`…`p4-ui-hotfix2`、`p4-ui-docs`、`p4-ui-docs-move`）與 p5 搬遷紀錄已封存在 `C:\Projects\_maintenance-history\Household-Expense\`；`Unclassified-Codex\` 為歸屬未確認的 p3 腳本。封存區的腳本路徑已失效，**不得執行**。
+- 既有限制（本次不修改腳本）：
+  - 四支 `.ps1` 固定使用分支 `feature/ui-redesign`，與「新工作從最新 main 另開分支」不一致；使用前需另案決定。
+  - `p4-release.json` 是 D-019 文件上線時的歷史設定（`expectedMain` `fcd823f`、`expectedTree` 等於 `a64c5d6` 的 tree）。下次部署前必須重新產生並確認；新開發不得直接沿用。
+  - `p4-ui-apply.ps1` 從 `Documents\Codex\<Bundle>` 讀取 bundle。
+- Port：`p4-start-dev.ps1` 預設 `localhost:3000`（P4 開發站，可用參數 `-Port` 指定）；3210 是 2026-10-28 遷移驗證與 2026-11-18 搬遷驗證（`p5-move-verify.ps1` 的 `$DevPort`）臨時啟動開發站所用。兩者用途不同，本次不統一。
+
+### 本次文件修改
+
+- `AGENTS.md`：驗證要求與依賴安裝改為 D-019 現行做法，OneDrive 做法改列為歷史；補 `npm run` 與 Emulator 測試說明。
+- `CLAUDE.md`：常用指令改用 pnpm 安裝；補環境 fail-closed、白名單、整合身分與主要程式位置。
+- `README.md`：安裝與測試指令、文件索引。
+- `docs/SPEC.md`：標註為早期規格。
+- `docs/ARCHITECTURE.md`：`integrationReaderIds`、`loanRepayments`、白名單（第 3 節）、環境隔離（第 10 節）、外部整合與還款明細（新增第 12 節）。
+- `docs/PROJECT_DECISIONS.md`：D-003、D-005、D-013、D-015、D-016、D-017、D-019 追加後續狀態；新增 D-020。
+- 未修改：`src/`、`firebase/`、`scripts/`、`tests/`、`package.json`、`pnpm-lock.yaml`、環境設定、`Documents\Codex` 腳本與 JSON。
+
+### 尚未驗證
+
+- Vercel Production 目前部署的 commit。
+- 正式 Firebase 現行 Rules 版本（是否為 R4 `d11fc1c`）與正式 `integrationReaderIds` 設定。
+- 兩位成員在正式環境的完整 CRUD 驗收（2026-10-29 起即列為未完成，之後未見紀錄）。
+- `家庭記帳-Rules備份` 資料夾的去向。
